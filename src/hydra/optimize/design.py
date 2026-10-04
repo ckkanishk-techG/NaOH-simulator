@@ -86,7 +86,7 @@ def to_scenario(d: dict[str, Any], goal: Goal) -> Scenario:
     return Scenario(al_mass_g=d["al_mass_g"], form=d["form"], dim_um=d["dim_um"], c_naoh_M=d["c_naoh_M"],
                     v_liq_mL=d["v_liq_mL"], v_vessel_mL=max(2.5 * d["v_liq_mL"], d["v_liq_mL"] + 150.0),  # magic: headspace sizing rule
                     T0_C=goal.T0_C, T_amb_C=goal.T_amb_C, mode="open", vent_diameter_mm=10.0,
-                    cooling_UA_W_K=d["cooling_UA"], duration_s=goal.duration_min * 60.0 * 1.05)  # magic: simulate 5 % past the requirement
+                    cooling_UA_W_K=max(d["cooling_UA"], 0.0), duration_s=goal.duration_min * 60.0 * 1.05)  # magic: simulate 5 % past the requirement
 
 
 def relief_capacity_mol_s(params: ParamSet, p_set_bar_g: float, T: float = 320.0) -> float:
@@ -284,11 +284,16 @@ def optimize_gradient(goal: Goal, form: str, x0: np.ndarray, space: Space | None
     b = [(math.log(space.al_mass_g[0]), math.log(space.al_mass_g[1])), (math.log(space.dim_um[0]), math.log(space.dim_um[1])),
          space.c_naoh_M, space.v_liq_mL, space.cooling_UA]
     hist: list[float] = []
+    scale: list[float] = []  # objective scaled once by the initial gradient norm so L-BFGS-B's unit first step is sane
 
     def fg(x: np.ndarray) -> tuple[float, np.ndarray]:
         v, g = jp.value_and_grad(x)
+        if not scale:
+            scale.append(1.0 / max(float(np.linalg.norm(g)), 1.0))  # magic: floor
+        if not (math.isfinite(v) and np.all(np.isfinite(g))):  # unstable trial point: large finite value so the line search backtracks
+            return 1e3 * (hist[0] if hist else 1.0) * scale[0], np.zeros_like(x)  # magic: penalty for failed trial
         hist.append(v)
-        return v, g
+        return v * scale[0], g * scale[0]
 
     res = minimize(fg, x0, jac=True, method="L-BFGS-B", bounds=b, options={"maxiter": maxiter})
     xfull = np.array([res.x[0], goal.forms.index(form), res.x[1], res.x[2], res.x[3], res.x[4]])
