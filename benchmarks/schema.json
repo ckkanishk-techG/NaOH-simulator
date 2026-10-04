@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "citation", "conditions", "t_s", "h2_mol", "digitization_sd_mol"],
+  "properties": {
+    "id": {"type": "string"},
+    "citation": {"type": "string", "minLength": 10},
+    "conditions": {"type": "object"},
+    "t_s": {"type": "array", "items": {"type": "number"}},
+    "h2_mol": {"type": "array", "items": {"type": "number"}},
+    "digitization_sd_mol": {"type": "number"},
+    "measurement": {"type": "object"}
+  }
+}

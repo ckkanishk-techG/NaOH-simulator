@@ -69,3 +69,4 @@ e("batt_eta_chg", 0.97, "-", 0.8, 1.0, None, cat="system", src="[SRC-S6] battery
 e("batt_eta_dis", 0.97, "-", 0.8, 1.0, None, cat="system", src="[SRC-S6] battery discharge efficiency")
 e("sys_dt", 5.0, "s", 0.5, 60.0, None, cat="numerics", src="system coupling step", status="exact")
 e("fc_UA_end_mult", 2.5, "-", 1.0, 10.0, None, cat="fuelcell", src="[SRC-F21] end plates lose more heat than inner cells")
+e("ec_eps_al", 0.1, "-", 0.0, 1.0, None, cat="electrochem", src="[SRC-EC15] exponent of the aluminate (Nernst) factor in the reduced echem model (= alpha_a alpha_c/(3(alpha_a+alpha_c)) in the full model)")
