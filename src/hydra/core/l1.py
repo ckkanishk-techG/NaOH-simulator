@@ -148,7 +148,7 @@ class L1Model:
         self.n_al_total0 = float(self.bins.n0.sum())
         self.events = {}
         self.n_valve_events = 0
-        self.state_for_bubbles: tuple[float, float] = (298.15, 1.0)
+        self.state_for_bubbles: tuple[float, float] = (T_REF, 1.0)
 
     # ------------------------------------------------------------------ initial state
     def initial_state(self) -> np.ndarray:

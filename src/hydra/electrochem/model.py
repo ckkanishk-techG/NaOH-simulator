@@ -139,7 +139,7 @@ class ElectrochemModel:
 def effective_arrhenius(model: ElectrochemModel, temps: Any = None, concs: Any = None) -> dict[str, float]:
     """Least-squares fit of ln j = ln k25 - Ea/R (1/T-1/T25) + n ln c to the mixed-potential model
     (ideal activities, film fully active) over a T/c grid - the 'limiting-case' Arrhenius parameters."""
-    temps = np.linspace(288.15, 348.15, 7) if temps is None else np.asarray(temps)
+    temps = np.linspace(288.15, 348.15, 7) if temps is None else np.asarray(temps)  # magic: default grid 15-75 C
     concs = np.array([0.5, 1.0, 2.0, 3.0, 4.0]) if concs is None else np.asarray(concs)
     rows, y = [], []
     for T in temps:

@@ -18,7 +18,7 @@ def regime_map(sc: Scenario, params: ParamSet | None = None, jg: float = 0.0,
                temps: np.ndarray | None = None, concs: np.ndarray | None = None) -> dict[str, np.ndarray]:
     """Da(T, c) on a grid with regime labels 0=kinetic, 1=mixed, 2=mass-transfer controlled."""
     p = params or ParamSet()
-    temps = np.linspace(288.15, 363.15, 16) if temps is None else temps
+    temps = np.linspace(288.15, 363.15, 16) if temps is None else temps  # magic: default grid 15-90 C
     concs = np.linspace(0.25, 6.0, 20) if concs is None else concs
     ex = L2Extras(p, sc)
     d = np.array([sc.dim_um * 1.0e-6])
