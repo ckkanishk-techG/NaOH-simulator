@@ -1,0 +1,7 @@
+e("air_k", 0.026, "W m-1 K-1", None, None, None, cat="vessel", src="[SRC-V16] air at ~300 K", status="unverified")
+e("air_nu", 1.6e-5, "m2 s-1", None, None, None, cat="vessel", src="[SRC-V16] air at ~300 K", status="unverified")
+e("air_alpha", 2.2e-5, "m2 s-1", None, None, None, cat="vessel", src="[SRC-V16] air at ~300 K", status="unverified")
+e("air_Pr", 0.71, "-", None, None, None, cat="vessel", src="[SRC-V16] air at ~300 K", status="unverified")
+e("cp_liq_mass", 3700.0, "J kg-1 K-1", 3500.0, 4200.0, None, cat="electrolyte", src="[SRC-E7] used only for Prandtl number", status="prior")
+e("stirred_h_mult", 3.0, "-", 1.0, 10.0, None, cat="vessel", src="[SRC-V17] placeholder: inner-h multiplier when stirred", desc="Inner heat-transfer multiplier for stirred liquid")
+e("valve_smooth_dP", 100.0, "Pa", 10.0, 1000.0, None, cat="numerics", src="numerical: smoothing of the orifice law near zero pressure difference (avoids infinite slope)")

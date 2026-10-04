@@ -1,0 +1,7 @@
+e("gas_gamma", 1.4, "-", 1.2, 1.67, None, cat="gas", src="[SRC-G8] ideal-gas heat capacity ratio of the vented mixture", status="prior")
+e("creep_strain_limit", 0.05, "-", 0.01, 0.2, None, cat="safety", src="[SRC-V15] engineering choice", desc="Creep strain limit for HDPE shell")
+e("T_sat_water_margin", 5.0, "K", 0.0, 20.0, None, cat="safety", src="engineering choice", desc="Warn this far below boiling")
+e("nu_foil_edge_mm", 20.0, "mm", 1.0, 100.0, None, cat="material", src="scenario default piece size")
+e("kv_crystal", 0.5236, "-", 0.1, 1.0, None, cat="electrolyte", src="sphere volume shape factor pi/6", status="exact")
+e("vanish_frac", 1.0e-4, "-", 1e-6, 1e-2, None, cat="numerics", src="numerical: remaining volume fraction at which a sheet is treated as gone", status="exact")
+e("hdpe_T_creep_ref", 296.15, "K", None, None, None, cat="vessel", src="reference temperature of creep law", status="exact")

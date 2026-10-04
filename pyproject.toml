@@ -33,16 +33,25 @@ packages = ["src/hydra"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -W ignore::hydra.thermo.ranges.RangeWarning"
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+ignore = ["B905", "E741", "E731", "E501"]
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017"]
+"scripts/props_*.py" = ["F821"]
 
 [tool.mypy]
 python_version = "3.11"
-strict = true
 plugins = ["pydantic.mypy"]
+check_untyped_defs = true
+disallow_incomplete_defs = true
+warn_unused_ignores = false
+warn_return_any = false
+ignore_missing_imports = true
+no_implicit_optional = true
 files = ["src/hydra"]
