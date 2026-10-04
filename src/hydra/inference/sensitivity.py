@@ -58,7 +58,7 @@ def tornado(sc: Scenario, names: list[str], base: ParamSet | None = None, model:
     sorted by swing."""
     base = base or ParamSet()
     t_ref = t_ref or 0.5 * sc.duration_s
-    rows = []
+    rows: list[dict[str, Any]] = []
     q0 = _qoi(lf.simulate_fast(lf.build_constants(sc, base, model, dt), sc, dt), sc, t_ref)[qoi]
     for n in names:
         e = DB.entry(n)

@@ -137,7 +137,7 @@ def fisher_information(fit: FitResult) -> dict[str, Any]:
 
 
 def profile_likelihood(pred: Predictor, fit: FitResult, name: str, n_grid: int = 15, span: float = 3.0,
-                       model_err_rel: float = 0.0) -> dict[str, np.ndarray | float]:
+                       model_err_rel: float = 0.0) -> dict[str, Any]:
     """Profile chi2 of one parameter (others re-optimised); 95 % interval from delta-chi2 = 3.84."""
     i = fit.names.index(name)
     from .data import ParamSpace

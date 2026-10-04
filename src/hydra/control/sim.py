@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from ..constants import KELVIN_OFFSET
 from ..core.params import ParamSet
 from ..core.scenario import Scenario
 from ..thermo import propdb as DB
@@ -90,7 +91,7 @@ def run_closed_loop(plant: DosingPlant, controller: Controller | Callable[[float
         "dosed_mL": float(plant.total_dosed_mL),
         "vented_fraction": float(vent / gen) if gen > 0 else 0.0,
         "delivered_fraction_mean": float(np.mean(s["delivered"][m & dem])) if np.any(m & dem) else 1.0,
-        "safety_margin_T_C": float(DB.get("T_hdpe_max") - 273.15 - s["Tw"].max()),
+        "safety_margin_T_C": float(DB.get("T_hdpe_max") - KELVIN_OFFSET - s["Tw"].max()),
         "interlock_trips": float(len(lock.tripped)),
     }
     return ClosedLoopResult(s["t"], s, metrics, lock.tripped)

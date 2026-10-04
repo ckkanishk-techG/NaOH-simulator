@@ -15,6 +15,7 @@ from typing import Any
 
 import numpy as np
 
+from ..constants import KELVIN_OFFSET, V_STP_L
 from ..core import l1_fast as lf
 from ..core.params import ParamSet
 from ..core.scenario import Scenario
@@ -139,8 +140,8 @@ class SimulatedSource:
         self.truth = sim
         self.t_sensor = t_sensor or Sensor("tc", "C", tau_s=8.0, noise_sd=0.1, resolution=0.0625, drift_per_h=0.02)
         self.w_sensor = wall_sensor or Sensor("wall", "C", tau_s=3.0, noise_sd=0.1)
-        self.read_T = self.t_sensor.apply(sim["t"], sim["T"] - 273.15)
-        self.read_W = self.w_sensor.apply(sim["t"], sim["Tw"] - 273.15)
+        self.read_T = self.t_sensor.apply(sim["t"], sim["T"] - KELVIN_OFFSET)
+        self.read_W = self.w_sensor.apply(sim["t"], sim["Tw"] - KELVIN_OFFSET)
         self.sd_flow, self.r_mem_mult, self.i_stack, self.n_cells = sd_flow, r_mem_mult, stack_current, n_cells
         self.flow_sensor = flow_sensor
 
@@ -151,7 +152,7 @@ class SimulatedSource:
 
         stack = Stack(StackSpec(n_series=self.n_cells, seed=0), ParamSet({"fc_asr": ParamSet()["fc_asr"] * self.r_mem_mult}))
         for k in range(1, len(t)):
-            flow = (gen[k] - gen[k - 1]) / self.dt * 22.414 * 60.0 if self.flow_sensor else NAN  # L/min STP
+            flow = (gen[k] - gen[k - 1]) / self.dt * V_STP_L * 60.0 if self.flow_sensor else NAN  # L/min STP
             v = stack.voltage(self.i_stack) if self.i_stack > 0 else NAN
             yield Frame(float(t[k]), float(self.read_T[k] + self.t_sensor.noise_sd * self.rng.standard_normal()),
                         float(self.read_W[k] + self.w_sensor.noise_sd * self.rng.standard_normal()), 0.0,

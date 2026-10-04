@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+from ..constants import KELVIN_OFFSET
 from ..core.params import ParamSet
 from ..core.scenario import Scenario
 from ..thermo import electrolyte
@@ -30,7 +31,7 @@ def export_case(sc: Scenario, out_dir: str | Path, params: ParamSet | None = Non
     vl = sc.v_liq_mL * 1e-6
     H = vl / (math.pi * R**2)
     wedge = math.radians(2.5)  # half-angle of the 5-degree wedge
-    T0, Ta = sc.T0_C + 273.15, sc.T_amb_C + 273.15
+    T0, Ta = sc.T0_C + KELVIN_OFFSET, sc.T_amb_C + KELVIN_OFFSET
     rho = electrolyte.density(sc.c_naoh_M, T0)
     mu = electrolyte.viscosity(sc.c_naoh_M, T0)
     h_wall = 1.0 / (1.0 / 8.0 + p["t_ves"] / p["k_hdpe"])  # magic: ~8 W/m2K outer natural convection, series with wall conduction

@@ -24,13 +24,15 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.integrate import solve_ivp
 
-from ..constants import G_ACC, MW_H2O, R, SIGMA_SB, T_REF
+from ..constants import G_ACC, KELVIN_OFFSET, MW_H2O, SIGMA_SB, T_REF, R
 from ..core.geometry import area_fraction, make_bins
 from ..core.params import ParamSet
 from ..core.scenario import Scenario
 from ..thermo import electrolyte, species
 from ..thermo import propdb as DB
 from . import fvm
+
+N_OUT_DEFAULT = 120  # magic: default number of output times
 
 
 @dataclass
@@ -87,7 +89,7 @@ class AxisymModel:
         self.n0_c, self.a0_c = self.n0_tot * self.w, self.a0_tot * self.w
         self.v_liq_c = self.eps * g.vol
         c0 = sc.c_naoh_M
-        self.T0 = sc.T0_C + 273.15
+        self.T0 = sc.T0_C + KELVIN_OFFSET
         self.M_oh0 = c0 * 1e3 * self.v_liq_c  # mol per cell
         rho = electrolyte.density(c0, self.T0)
         nw_tot = (rho * V_liq - c0 * V_liq / 1e-3 * 39.997e-3) / MW_H2O  # magic: NaOH molar mass
@@ -116,7 +118,7 @@ class AxisymModel:
         self.H_ves = sc.v_vessel_mL * 1e-6 / (math.pi * self.R**2)
         self.A_out = 2 * math.pi * r_o * self.H_ves + 2 * math.pi * r_o**2
         self.C_wall = p["m_ves"] * p["cp_hdpe"]
-        self.T_amb = sc.T_amb_C + 273.15
+        self.T_amb = sc.T_amb_C + KELVIN_OFFSET
         self.dh298, self.dcp = species.reaction_enthalpy(T_REF), species.reaction_delta_cp()
         self.cp = {k: species.cp(k) for k in ("H2O(l)", "Na+(aq)", "OH-(aq)", "Al(OH)4-(aq)", "Al(s)")}
         self.cp_m = DB.get("cp_liq_mass")
@@ -272,7 +274,7 @@ class AxisymModel:
 def simulate_l3(sc: Scenario, params: ParamSet | None = None, nr: int = 20, **kw: Any) -> SpatialResult:
     """1-D radial model (single axial cell, no axial heat loss, optional bottom loss lumped over the radius)."""
     return AxisymModel(sc, params, nr=nr, nz=1, settled_fraction=0.0, **{k: v for k, v in kw.items() if k not in ("nz", "t_end", "n_out")}).run(
-        kw.get("t_end"), kw.get("n_out", 120))
+        kw.get("t_end"), kw.get("n_out", N_OUT_DEFAULT))
 
 
 def simulate_l4(sc: Scenario, params: ParamSet | None = None, nr: int = 10, nz: int = 10, settled_fraction: float = 1.0,
@@ -280,7 +282,7 @@ def simulate_l4(sc: Scenario, params: ParamSet | None = None, nr: int = 10, nz: 
     """2-D axisymmetric model with a settled particle bed and bottom heat loss."""
     kw.setdefault("bottom_loss", True)
     return AxisymModel(sc, params, nr=nr, nz=nz, settled_fraction=settled_fraction,
-                       **{k: v for k, v in kw.items() if k not in ("t_end", "n_out")}).run(kw.get("t_end"), kw.get("n_out", 120))
+                       **{k: v for k, v in kw.items() if k not in ("t_end", "n_out")}).run(kw.get("t_end"), kw.get("n_out", N_OUT_DEFAULT))
 
 
 def with_gci(factory: Any, levels: tuple[tuple[int, int], ...] = ((6, 1), (12, 1), (24, 1)), keys: tuple[str, ...] = (

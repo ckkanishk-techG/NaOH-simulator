@@ -32,3 +32,4 @@ MW_NAOH = 39.997e-3
 MW_ALOH4 = MW_AL + 4 * (MW_O + MW_H)  # Al(OH)4-
 MW_ALOH3 = MW_AL + 3 * (MW_O + MW_H)
 MW_AIR = 28.9647e-3
+V_STP_L = R * T_STP / P_ATM * 1.0e3  # litres per mole of ideal gas at 0 C, 1 atm (22.414)

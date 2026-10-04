@@ -14,17 +14,27 @@ dependencies = [
   "numpy>=1.26",
   "scipy>=1.12",
   "pint>=0.23",
+  "python-multipart>=0.0.9",
+  "matplotlib>=3.8",
+  "h5py>=3.10",
+  "scikit-learn>=1.4",
+  "sympy>=1.12",
 ]
 
 [project.optional-dependencies]
 fast = ["numba>=0.59"]
+hardware = ["pyserial>=3.5", "pymodbus>=3.6"]
+report = ["weasyprint>=61"]
 jax = ["jax>=0.4.25"]
-bayes = ["emcee>=3.1", "SALib>=1.5", "scikit-learn>=1.4"]
+bayes = ["emcee>=3.1", "SALib>=1.5", "numpyro>=0.14"]
 server = ["redis>=5", "rq>=1.16", "psycopg[binary]>=3.1", "argon2-cffi>=23"]
 dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.4", "mypy>=1.9", "httpx>=0.27"]
 
 [project.scripts]
 hydra-sim = "hydra.cli:main"
+hydra-worker = "hydra.cli:worker_main"
+hydra-user = "hydra.cli:user_main"
+hydra-benchmarks = "hydra.inference.benchmarks:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hydra"]
@@ -44,6 +54,7 @@ ignore = ["B905", "E741", "E731", "E501"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B017"]
 "scripts/props_*.py" = ["F821"]
+"src/hydra/api/app.py" = ["B008"]  # FastAPI Depends() idiom
 
 [tool.mypy]
 python_version = "3.11"

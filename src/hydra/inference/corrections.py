@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..constants import G_ACC, MW_H2, P_ATM, R, T_STP
+from ..constants import G_ACC, MW_H2, P_ATM, T_STP, R
 from ..thermo import gas, water
 
 METHODS = ("water_displacement", "gas_syringe", "flowmeter", "mass_loss")

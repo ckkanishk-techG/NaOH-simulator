@@ -17,7 +17,7 @@ import numpy as np
 from pydantic import BaseModel, Field
 from scipy.optimize import differential_evolution, minimize
 
-from ..constants import F, MW_NAOH, P_ATM, R
+from ..constants import BAR, KELVIN_OFFSET, MW_NAOH, P_ATM, F, R
 from ..core import l1_fast as lf
 from ..core.l1 import SolverSettings, simulate
 from ..core.params import ParamSet
@@ -93,7 +93,7 @@ def relief_capacity_mol_s(params: ParamSet, p_set_bar_g: float, T: float = 320.0
     """Orifice capacity of the relief valve for H2 at its set pressure [mol/s] (choked/unchoked ideal-gas orifice)."""
     g, cd = DB.get("gas_gamma"), params["valve_Cd"]
     area = params["valve_Cv"] * DB.get("valve_Av_per_Cv")
-    p = P_ATM + p_set_bar_g * 1.0e5
+    p = P_ATM + p_set_bar_g * BAR
     pr = P_ATM / p
     crit = (2.0 / (g + 1.0)) ** (g / (g - 1.0))
     if pr <= crit:
@@ -118,11 +118,11 @@ def evaluate(x: np.ndarray, goal: Goal, prices: Prices | None = None, params: Pa
     need = f_mol * np.maximum(t - goal.ramp_s, 0.0)
     m = t <= y
     slack = gen[m] + buf - need[m]
-    peak_T = float(sim["T"].max() - 273.15)
+    peak_T = float(sim["T"].max() - KELVIN_OFFSET)
     peak_flow = float(np.max(np.gradient(gen, t))) if len(t) > 2 else 0.0
     cap = relief_capacity_mol_s(params, goal.p_max_bar_g)
     sy, r_ves, t_ves = params["sy23"], params["r_ves"], params["t_ves"]
-    sf = sy / (goal.p_max_bar_g * 1e5 * r_ves / t_ves)
+    sf = sy / (goal.p_max_bar_g * BAR * r_ves / t_ves)
     viol = {
         "flow": max(0.0, -float(slack.min())) / max(f_mol * y, 1e-12),  # magic: floor
         "peak_T": max(0.0, peak_T - goal.peak_T_C) / 10.0,  # magic: 10 K scale
@@ -335,7 +335,7 @@ def _dominates(a: np.ndarray, b: np.ndarray, va: float, vb: float) -> bool:
 
 def _fronts(F_: np.ndarray, v: np.ndarray) -> list[list[int]]:
     n = len(F_)
-    dom = [[] for _ in range(n)]
+    dom: list[list[int]] = [[] for _ in range(n)]
     cnt = np.zeros(n, int)
     for i in range(n):
         for j in range(n):
@@ -428,15 +428,15 @@ def pareto_nsga2(goal: Goal, objectives: tuple[str, ...] = ("neg_yield", "peak_T
     Fv, V = fit(P)
     front = _fronts(Fv, V)[0]
     out, seen = [], set()
-    for i in front:
-        m = ev(P[i])
+    for idx_f in front:
+        m = ev(P[idx_f])
         if not m["feasible"]:
             continue
-        key = tuple(np.round(Fv[i], 6))
+        key = tuple(np.round(Fv[idx_f], 6))
         if key in seen:
             continue
         seen.add(key)
-        out.append({"x": P[i].copy(), "design": m["design"], "objectives": dict(zip(objectives, Fv[i].tolist(), strict=True)),
+        out.append({"x": P[idx_f].copy(), "design": m["design"], "objectives": dict(zip(objectives, Fv[idx_f].tolist(), strict=True)),
                     "metrics": m})
     return out
 

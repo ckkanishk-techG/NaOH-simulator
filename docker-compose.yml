@@ -7,8 +7,9 @@ services:
     depends_on: [ redis, postgres ]
   worker:
     build: .
-    command: ["python", "-c", "print('worker placeholder: stage 16')"]
-    depends_on: [ redis ]
+    command: ["hydra-worker", "--redis", "redis://redis:6379/0"]
+    volumes: [ "hydra-data:/data" ]
+    depends_on: [ redis, postgres ]
   redis:
     image: redis:7-alpine
   postgres:

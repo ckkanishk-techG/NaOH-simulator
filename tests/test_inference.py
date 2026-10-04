@@ -9,9 +9,14 @@ from hydra.core.params import ParamSet
 from hydra.core.scenario import Scenario
 from hydra.inference import bayes, benchmarks, discrepancy, hierarchical, modelsel, sensitivity, validation
 from hydra.inference.calibrate import Predictor, fisher_information, fit_lsq, profile_likelihood
-from hydra.inference.corrections import (Reading, correction_table, mass_loss_estimate_vapor, moles_from_reading,
-                                         moles_with_uncertainty)
-from hydra.inference.data import Channel, Experiment, ParamSpace, synthetic_experiment
+from hydra.inference.corrections import (
+    Reading,
+    correction_table,
+    mass_loss_estimate_vapor,
+    moles_from_reading,
+    moles_with_uncertainty,
+)
+from hydra.inference.data import ParamSpace, synthetic_experiment
 from hydra.inference.reconcile import bias_factor, reconcile, reconcile_curves
 from hydra.inference.sensors import Sensor
 

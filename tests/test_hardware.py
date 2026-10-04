@@ -147,5 +147,5 @@ def test_firmware_is_read_only_and_matches_the_csv_contract():
         assert forbidden not in ino
     assert ",".join(sources.FIELDS) == "t_s,T1_C,T2_C,P_bar_g,flow_L_min,I_A,V_V"
     assert "READ-ONLY" in ino and "relief" in ino.lower()
-    doc = (ROOT / "docs/HARDWARE.md").read_text()
+    doc = (ROOT / "src/hydra/docs/HARDWARE.md").read_text()
     assert "emergency stop" in doc and "DS18B20" in doc

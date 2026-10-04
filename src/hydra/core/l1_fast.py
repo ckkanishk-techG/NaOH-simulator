@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 
-from ..constants import G_ACC, ML, MW_AL, MW_H2O, MW_NA, MW_ALOH4, R, SIGMA_SB, T_REF
+from ..constants import G_ACC, KELVIN_OFFSET, ML, MW_AL, MW_ALOH4, MW_H2O, MW_NA, SIGMA_SB, T_REF, R
 from ..thermo import electrolyte, species
 from ..thermo import propdb as DB
 from .params import ParamSet
@@ -202,7 +202,7 @@ def build_constants(sc: Scenario, p: ParamSet | None = None, model: str = "empir
     lambda = c/f_s); the full adaptive/implicit model uses the tiny DB value instead."""
     p = p or ParamSet()
     w_emp, w_mt, w_ec = MODELS[model]
-    T0 = sc.T0_C + 273.15
+    T0 = sc.T0_C + KELVIN_OFFSET
     V_l = sc.v_liq_mL * ML
     nNa = sc.c_naoh_M * V_l / 1.0e-3
     rho = electrolyte.density(sc.c_naoh_M, T0)
@@ -238,8 +238,8 @@ def build_constants(sc: Scenario, p: ParamSet | None = None, model: str = "empir
         "k_liq": k_liq, "nu_l": nu, "al_l": alp, "beta": p["rho_beta_T"], "G_acc": G_ACC,
         "A_out": 2.0 * math.pi * r_o * h_ves + 2.0 * math.pi * r_o**2, "H_ves": h_ves, "emis": p["emis_hdpe"],
         "sigma": SIGMA_SB, "a_nu": DB.get("air_nu"), "a_al": DB.get("air_alpha"), "a_pr": DB.get("air_Pr"),
-        "a_k": DB.get("air_k"), "T_amb": sc.T_amb_C + 273.15, "C_wall": p["m_ves"] * p["cp_hdpe"],
-        "UA_cool": sc.cooling_UA_W_K, "T_cool": sc.coolant_T_C + 273.15,
+        "a_k": DB.get("air_k"), "T_amb": sc.T_amb_C + KELVIN_OFFSET, "C_wall": p["m_ves"] * p["cp_hdpe"],
+        "UA_cool": sc.cooling_UA_W_K, "T_cool": sc.coolant_T_C + KELVIN_OFFSET,
         "stir": p["stirred_h_mult"] if sc.stirred else 1.0, "R_gas": R, "kd_order": p["ec_k_diss_order"],
         "adiabatic": 1.0 if sc.adiabatic else 0.0,
     }
@@ -248,7 +248,7 @@ def build_constants(sc: Scenario, p: ParamSet | None = None, model: str = "empir
 
 
 def initial_state(sc: Scenario) -> np.ndarray:
-    T0 = sc.T0_C + 273.15
+    T0 = sc.T0_C + KELVIN_OFFSET
     return np.array([1.0, 0.0, T0, T0, 0.0, 0.0])
 
 

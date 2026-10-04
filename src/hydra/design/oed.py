@@ -15,12 +15,11 @@ from __future__ import annotations
 
 import html
 from dataclasses import dataclass, field
-from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, Field
 
-from ..constants import MW_NAOH
+from ..constants import KELVIN_OFFSET, MW_NAOH
 from ..core import l1_fast as lf
 from ..core import safety
 from ..core.params import ParamSet
@@ -33,8 +32,8 @@ from ..thermo import propdb as DB
 
 class LabConstraints(BaseModel):
     forms: list[str] = Field(default_factory=lambda: ["foil", "powder"])
-    dim_um_by_form: dict[str, list[float]] = Field(default_factory=lambda: {"foil": [10, 20, 50], "powder": [50, 100, 250],
-                                                                         "wire": [200, 500], "can": [100]})
+    dim_um_by_form: dict[str, list[float]] = Field(default_factory=lambda: {"foil": [10.0, 20.0, 50.0], "powder": [50.0, 100.0, 250.0],
+                                                                         "wire": [200.0, 500.0], "can": [100.0]})
     c_naoh_max_M: float = 4.0
     c_naoh_min_M: float = 0.2
     T0_range_C: tuple[float, float] = (15.0, 45.0)
@@ -156,7 +155,7 @@ def generate_candidates(cons: LabConstraints, n: int = 200, seed: int = 0, base:
         if rep.unsafe:
             why.append("pre-run safety screen: " + "; ".join(f.code for f in rep.flags if f.level == "danger"))
         sim = _predict(sc, base, cons, model, 4.0)
-        peak = float(sim["T"].max() - 273.15)
+        peak = float(sim["T"].max() - KELVIN_OFFSET)
         conv = float(sim["gen"][-1] / (1.5 * lf.build_constants(sc, base)[lf.KI["n0"]]))
         if peak > cons.peak_T_limit_C:
             why.append(f"peak T {peak:.0f} C > limit {cons.peak_T_limit_C:.0f} C")
@@ -213,7 +212,7 @@ class Protocol:
                  "| t [s] | n_H2 [mmol] | lo | hi | T [C] |", "|---|---|---|---|---|"]
         for i, t in enumerate(self.expected["t"]):
             lines.append(f"| {t:.0f} | {1e3 * self.expected['n_med'][i]:.2f} | {1e3 * self.expected['n_lo'][i]:.2f} | "
-                         f"{1e3 * self.expected['n_hi'][i]:.2f} | {self.expected['T_med'][i] - 273.15:.1f} |")
+                         f"{1e3 * self.expected['n_hi'][i]:.2f} | {self.expected['T_med'][i] - KELVIN_OFFSET:.1f} |")
         lines += ["", "## Stop conditions"] + [f"- {s}" for s in self.stop_conditions]
         lines += ["", "## Safety"] + [f"- {s}" for s in self.safety]
         if self.note:
@@ -240,7 +239,7 @@ def make_protocol(cand: Candidate, fit: FitResult, cons: LabConstraints, base: P
     exp = {"t": t.tolist(), "n_med": np.median(n, 0).tolist(), "n_lo": np.quantile(n, 0.025, 0).tolist(),
            "n_hi": np.quantile(n, 0.975, 0).tolist(), "T_med": np.median(tt, 0).tolist()}
     n_mol = sc.c_naoh_M * sc.v_liq_mL / 1e3
-    peak_hi = float(np.quantile([s["T"].max() for s in sims], 0.975)) - 273.15
+    peak_hi = float(np.quantile([s["T"].max() for s in sims], 0.975)) - KELVIN_OFFSET
     t_limit = min(cons.peak_T_limit_C, base["T_hdpe_max"] - 273.15 - 10.0)  # magic: margin below HDPE service limit
     stops = [f"Liquid temperature reaches {t_limit:.0f} C (model 97.5 % peak: {peak_hi:.0f} C): remove heat source, add cold water bath, abort.",
              "Any boiling, foaming up to the vessel neck, or liquid/mist carry-over into the gas line.",

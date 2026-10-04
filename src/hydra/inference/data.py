@@ -109,7 +109,7 @@ class ParamSpace:
         if self.shear is None:
             return u
         ik, ie, inn, t_c, c_c = self.shear
-        from ..constants import R, T_REF
+        from ..constants import T_REF, R
 
         u = u.copy()
         sign = 1.0 if inverse else -1.0
@@ -134,7 +134,7 @@ class ParamSpace:
         """Matrix A with du_natural = A dx (linear map of the decorrelating shear and scaling)."""
         a = np.diag(self.scale.copy())
         if self.shear is not None:
-            from ..constants import R, T_REF
+            from ..constants import T_REF, R
 
             ik, ie, inn, t_c, c_c = self.shear
             a[ik, ie] = self.scale[ie] / R * (1.0 / t_c - 1.0 / T_REF)

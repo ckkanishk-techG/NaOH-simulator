@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from ..constants import F, MW_H2O, P_ATM
+from ..constants import BAR, KELVIN_OFFSET, MW_H2O, P_ATM, F
 from ..core.l1 import L1Model, SolverSettings
 from ..core.params import ParamSet
 from ..core.scenario import Scenario
@@ -94,7 +94,7 @@ class DosingPlant:
         p = self.m.pressure(y1)
         pg = max(p - P_ATM, 0.0)
         sf = 99.0 if pg < 1.0 else min(self.p["sy23"] / (pg * self.p["r_ves"] / self.p["t_ves"]), 99.0)  # magic: cap
-        obs = Obs(self.t, (p - P_ATM) / 1e5, y1[self.m.idx["T"]] - 273.15, y1[self.m.idx["Tw"]] - 273.15, v_l * 1e6, c_oh,
+        obs = Obs(self.t, (p - P_ATM) / BAR, y1[self.m.idx["T"]] - KELVIN_OFFSET, y1[self.m.idx["Tw"]] - KELVIN_OFFSET, v_l * 1e6, c_oh,
                   float(min(max(deliv, 0.0), 1.0)), demand, gen, sf, bool(y1[cx["boil_mol"]] > y0[cx["boil_mol"]]))
         self.log.append({"t": obs.t, "u": u, "P": obs.P_bar_g, "T": obs.T_C, "Tw": obs.Tw_C, "V": obs.V_liq_mL, "c": obs.c_oh,
                          "deliv": obs.delivered, "demand": obs.demand_mol_s, "gen": obs.gen_mol_s, "sf": obs.sf})
@@ -107,5 +107,5 @@ class DosingPlant:
         p = self.m.pressure(y)
         pg = max(p - P_ATM, 0.0)
         sf = 99.0 if pg < 1.0 else min(self.p["sy23"] / (pg * self.p["r_ves"] / self.p["t_ves"]), 99.0)  # magic: cap
-        return Obs(self.t, (p - P_ATM) / 1e5, y[self.m.idx["T"]] - 273.15, y[self.m.idx["Tw"]] - 273.15, v_l * 1e6, c_oh, 1.0, 0.0, 0.0, sf,
+        return Obs(self.t, (p - P_ATM) / BAR, y[self.m.idx["T"]] - KELVIN_OFFSET, y[self.m.idx["Tw"]] - KELVIN_OFFSET, v_l * 1e6, c_oh, 1.0, 0.0, 0.0, sf,
                    False)

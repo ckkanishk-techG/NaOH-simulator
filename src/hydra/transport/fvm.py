@@ -127,7 +127,7 @@ def mms_spatial_order(nrs: tuple[int, ...] = (8, 16, 32, 64), nz: int = 1, theta
 
     r, t = s.symbols("r t")
     rr = 1.0
-    gamma0 = 0.7
+    gamma0 = 0.7  # magic: manufactured-solution diffusivity (test fixture)
     phi = 1 + s.cos(s.pi * r / (2 * rr)) * (1 + t)
     source = s.diff(phi, t) - (gamma0 / r) * s.diff(r * s.diff(phi, r), r)
     phi_f, src_f = s.lambdify((r, t), phi, "numpy"), s.lambdify((r, t), source, "numpy")
@@ -171,7 +171,7 @@ def theta_temporal_order(theta: float, dts: tuple[int, ...] = (10, 20, 40, 80)) 
     """Observed temporal order of the theta scheme on a smooth linear problem against the matrix-exponential solution."""
     from scipy.linalg import expm
 
-    g = Grid(1.0, 1.0, 24, 1)
+    g = Grid(1.0, 1.0, 24, 1)  # magic: test grid of the temporal-order check
     a_mat, b = diffusion_operator(g, np.full(g.n, 0.5), h_wall=2.0, phi_inf=0.0)
     phi0 = np.cos(math.pi * g.r_c / 2.0)
     cap = g.vol

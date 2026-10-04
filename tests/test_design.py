@@ -54,7 +54,6 @@ def test_realised_information_gain_best_beats_worst(setup):
 
     def posterior_logdet(extra):
         f2 = fit_lsq(Predictor(exps + [extra]), NAMES)
-        a = f2.space.jac_natural()
         return float(np.linalg.slogdet(f2.cov)[1])
 
     def add(c):

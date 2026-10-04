@@ -112,7 +112,7 @@ def koh_calibrate(pred: Predictor, names: list[str], x0: dict[str, float] | None
 
         def nlml(uu: np.ndarray, k: Any = k, gp: DiscrepancyGP = gp) -> float:
             tab = residual_table(pred, pred.base.with_(**space.from_u(uu)), kinds)
-            kmat = k(((tab.X - gp.mu) / gp.sd)) * gp.scale_y**2
+            kmat = k((tab.X - gp.mu) / gp.sd) * gp.scale_y**2
             kmat = kmat + np.diag(tab.sigma**2)
             try:
                 lfac = np.linalg.cholesky(kmat)

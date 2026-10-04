@@ -152,7 +152,7 @@ def autotune_relay(plant: DosingPlant, setpoint: float, u_mid: float, d: float, 
     snap = plant.snapshot()
     u = u_mid + d
     ys, ts, sw = [], [], []
-    for k in range(int(duration_s / plant.dt)):
+    for _ in range(int(duration_s / plant.dt)):
         o = plant.step(u)
         y = o.P_bar_g
         ys.append(y)

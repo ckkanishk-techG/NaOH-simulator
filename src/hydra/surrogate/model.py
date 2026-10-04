@@ -23,6 +23,7 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import ConstantKernel, Matern, WhiteKernel
 from sklearn.neural_network import MLPRegressor
 
+from ..constants import BAR, KELVIN_OFFSET, P_ATM
 from ..core import l1_fast as lf
 from ..core.l1 import SolverSettings, simulate
 from ..core.params import ParamSet
@@ -230,7 +231,7 @@ class Surrogate:
             c = self._curves(extended_features(sc, self.params)[None, :])
             nmax = 1.5 * sc.al_mass_g * 1e-3 / 26.9815385e-3  # magic: g/mol Al
             pg = c["Pg"][0] if "Pg" in c else np.zeros_like(t)
-            return SurrogateOutput(t, c["X"][0] * nmax, c["dT"][0] + sc.T0_C + 273.15, pg, "surrogate", ok, why, dict(self.bounds),
+            return SurrogateOutput(t, c["X"][0] * nmax, c["dT"][0] + sc.T0_C + KELVIN_OFFSET, pg, "surrogate", ok, why, dict(self.bounds),
                                    time.perf_counter() - t0)
         return physics_run(sc, t, params or self.params, why, time.perf_counter() - t0)
 
@@ -253,7 +254,7 @@ def physics_run(sc: Scenario, t: np.ndarray, params: ParamSet | None, why: list[
         return SurrogateOutput(t, np.interp(t, s["t"], s["gen"]), np.interp(t, s["t"], s["T"]), np.zeros_like(t), "physics", False, why, {}, elapsed)
     r = simulate(sc, p, SolverSettings(dt_out=float(t[1] - t[0]), rtol=1e-6))
     return SurrogateOutput(t, np.interp(t, r.t, r["h2_gen_mol"]), np.interp(t, r.t, r["T"]),
-                           np.interp(t, r.t, (r["P"] - 101325.0) / 1e5), "physics", False, why, {}, elapsed)
+                           np.interp(t, r.t, (r["P"] - P_ATM) / BAR), "physics", False, why, {}, elapsed)
 
 
 # ---------------------------------------------------------------- physics-informed neural ODE (optional, JAX)
@@ -318,8 +319,9 @@ class NeuralODE:
             hist.append(float(val))
             m = jax.tree_util.tree_map(lambda a, b: 0.9 * a + 0.1 * b, m, g)
             v = jax.tree_util.tree_map(lambda a, b: 0.999 * a + 0.001 * b * b, v, g)
+            c1, c2 = 1 - 0.9**e, 1 - 0.999**e  # magic: Adam bias corrections
             self.params = jax.tree_util.tree_map(
-                lambda p_, m_, v_: p_ - lr * (m_ / (1 - 0.9**e)) / (jnp.sqrt(v_ / (1 - 0.999**e)) + 1e-8), self.params, m, v)  # magic: Adam constants
+                lambda p_, m_, v_, c1=c1, c2=c2: p_ - lr * (m_ / c1) / (jnp.sqrt(v_ / c2) + 1e-8), self.params, m, v)  # magic: Adam epsilon
         return hist
 
     def predict(self, sc: Scenario) -> dict[str, np.ndarray]:
@@ -329,4 +331,4 @@ class NeuralODE:
         u = jnp.asarray((features_of(sc) - self.lo) / (self.hi - self.lo))
         tr = np.asarray(self._rollout(self.params, u, self.space.n_time))
         nmax = 1.5 * sc.al_mass_g * 1e-3 / 26.9815385e-3  # magic: g/mol Al
-        return {"t": self.space.t_grid, "h2_mol": tr[:, 0] * nmax, "T_K": tr[:, 1] * 20.0 + sc.T0_C + 273.15}
+        return {"t": self.space.t_grid, "h2_mol": tr[:, 0] * nmax, "T_K": tr[:, 1] * 20.0 + sc.T0_C + KELVIN_OFFSET}

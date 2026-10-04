@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from ..constants import F, KELVIN_OFFSET
+from ..constants import KELVIN_OFFSET, F
 from ..core import l1_fast as lf
 from ..core.params import ParamSet
 from ..core.scenario import Scenario

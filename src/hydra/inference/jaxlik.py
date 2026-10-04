@@ -61,7 +61,7 @@ class JaxPosterior:
         sp = self.space
         u = x * sp.scale + sp.centre
         if sp.shear is not None:
-            from ..constants import R, T_REF
+            from ..constants import T_REF, R
 
             ik, ie, inn, t_c, c_c = sp.shear
             term = -u[ie] / R * (1.0 / t_c - 1.0 / T_REF) + u[inn] * np.log(c_c)
@@ -88,7 +88,7 @@ class JaxPosterior:
         ks = jnp.asarray(self.k_base).at[:, self.k_idx].set(theta[None, :])
         out = self._vm(jnp.asarray(self.y0), ks)  # (nexp, nsteps+1, 6)
         res, logs = [], 0.0
-        for ie, colx, i0, w, y, sg, gain, off, drift, tau, wt, t in self._chan:
+        for ie, colx, i0, w, y, sg, gain, off, drift, tau, wt, _t in self._chan:
             series = out[ie, :, colx]
             if tau > 0 or gain != 1.0 or off != 0.0 or drift != 0.0:
                 grid_t = jnp.arange(series.shape[0]) * self.dt

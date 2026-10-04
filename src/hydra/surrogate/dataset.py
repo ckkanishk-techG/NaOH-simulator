@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 from scipy.stats import qmc
 
+from ..constants import BAR, KELVIN_OFFSET, P_ATM
 from ..core import l1_fast as lf
 from ..core.l1 import SolverSettings, simulate
 from ..core.params import ParamSet
@@ -76,7 +77,7 @@ def extended_features(sc: Scenario, params: ParamSet | None = None) -> np.ndarra
 
     p = params or ParamSet()
     k = lf.build_constants(sc, p, dt=4.0)  # magic: step only affects the (unused) ramp width
-    t0 = sc.T0_C + 273.15
+    t0 = sc.T0_C + KELVIN_OFFSET
     kr = p["k25"] * np.exp(-p["Ea"] / _R * (1.0 / t0 - 1.0 / 298.15)) * sc.c_naoh_M ** p["n_oh"]  # magic: T_ref
     tau0 = k[lf.KI["n0"]] / (k[lf.KI["a0"]] * kr)
     dtad = -k[lf.KI["dh298"]] * k[lf.KI["n0"]] / (k[lf.KI["nW0"]] * k[lf.KI["cp_w"]] + k[lf.KI["C_wall"]])
@@ -99,11 +100,11 @@ def run_one(args: tuple[np.ndarray, InputSpace, str, dict[str, float]]) -> dict[
         r = simulate(sc, p, SolverSettings(dt_out=float(t[1] - t[0]), rtol=1e-6))
         n = np.interp(t, r.t, r["h2_gen_mol"])
         temp = np.interp(t, r.t, r["T"])
-        pg = np.interp(t, r.t, (r["P"] - 101325.0) / 1e5)
+        pg = np.interp(t, r.t, (r["P"] - P_ATM) / BAR)
     xx = np.clip(n / nmax, 0.0, 1.0)
     th = float(np.interp(0.5, np.maximum.accumulate(xx), t)) if xx[-1] >= 0.5 else float("nan")  # magic: half conversion
-    return {"X": xx, "dT": temp - (sc.T0_C + 273.15), "Pg": pg, "nmax": np.array(nmax), "t_half": np.array(th),
-            "feat": extended_features(sc, p), "peak_T_C": np.array(float(temp.max() - 273.15))}
+    return {"X": xx, "dT": temp - (sc.T0_C + KELVIN_OFFSET), "Pg": pg, "nmax": np.array(nmax), "t_half": np.array(th),
+            "feat": extended_features(sc, p), "peak_T_C": np.array(float(temp.max() - KELVIN_OFFSET))}
 
 
 def generate_dataset(n: int, space: InputSpace | None = None, fidelity: str = "fast", workers: int | None = None, seed: int = 0,
@@ -118,7 +119,7 @@ def generate_dataset(n: int, space: InputSpace | None = None, fidelity: str = "f
     else:
         with ProcessPoolExecutor(max_workers=workers) as ex:
             out = list(ex.map(run_one, jobs, chunksize=max(1, n // (4 * workers))))  # magic: chunking
-    d = {"x": x, "X": np.array([o["X"] for o in out]), "dT": np.array([o["dT"] for o in out]),
+    d: dict[str, Any] = {"x": x, "X": np.array([o["X"] for o in out]), "dT": np.array([o["dT"] for o in out]),
          "Pg": np.array([o["Pg"] for o in out]), "nmax": np.array([float(o["nmax"]) for o in out]), "space": space,
          "fidelity": fidelity, "t_half": np.array([float(o["t_half"]) for o in out]),
          "feat": np.array([o["feat"] for o in out]), "peak_T_C": np.array([float(o["peak_T_C"]) for o in out]),
