@@ -193,6 +193,18 @@ class L1Model:
         return (gas.pressure_h2(max(y[ix["nH2"]], 0.0), Vg, T, self.sc.eos)
                 + (max(y[ix["nAir"]], 0.0) + max(y[ix["nV"]], 0.0)) * R * T / Vg)
 
+    def set_rate_context(self, T: float, nOH: float, nAlO: float, kg_w: float, V_l: float, c_oh: float) -> None:
+        """Give activity-based rate models the surface activities (Pitzer or ideal)."""
+        rate = self.rate
+        if not getattr(rate, "needs_activity", False):
+            return
+        m_oh, m_al = nOH / kg_w, nAlO / kg_w
+        if getattr(rate, "use_act", False):
+            _, ln_oh, ln_al = pitzer.ln_gamma(m_oh, m_al, T, model=self.sc.activity_model)
+            rate.ctx = (m_oh * math.exp(ln_oh), m_al * math.exp(ln_al))
+        else:
+            rate.ctx = (c_oh, nAlO / (V_l / LITRE))
+
     def orifice_mol(self, area: float, P: float, T: float, M: float) -> float:
         r"""Compressible orifice molar flow [mol/s] to ambient: :math:`\dot n=C_d A P\psi/\sqrt{RTM}`."""
         if P <= P_ATM:
@@ -231,6 +243,8 @@ class L1Model:
         room_ach = sc.room_ach / 3600.0
         has_valve = mode != "sealed"
         adiabatic = sc.adiabatic
+        needs_act = getattr(rate, "needs_activity", False)
+        use_act = getattr(rate, "use_act", False)
 
         def rhs(t: float, y: np.ndarray) -> np.ndarray:
             dy = np.zeros_like(y)
@@ -249,6 +263,13 @@ class L1Model:
             P_tot = P_h2 + (nAir + nV) * R * T / Vg
             # ---- surface reaction
             kmt = extras.kmt(T, c_oh, d_m, me) if extras is not None else me.kmt0
+            if needs_act:
+                m_oh_, m_al_ = nOH / kg_w, nAlO / kg_w
+                if use_act:
+                    _, ln_oh_, ln_al_ = pitzer.ln_gamma(m_oh_, m_al_, T, model=am)
+                    rate.ctx = (m_oh_ * math.exp(ln_oh_), m_al_ * math.exp(ln_al_))
+                else:
+                    rate.ctx = (c_oh, nAlO / (V_l / LITRE))
             j, _cs = rate.flux(T, c_oh, film, thb if extras is not None else 0.0, kmt)
             af = area_fraction(f, g_exp, f_s)
             r_i = np.broadcast_to(np.asarray(j, float), (nb,)) * a0 * af
@@ -462,7 +483,7 @@ class L1Model:
         ix, cx, sc, p = self.idx, self.cidx, self.sc, self.p
         n = len(t)
         keys = ("T", "Tw", "P", "V_l", "c_oh", "c_al", "Vg", "al_g", "flow", "Da", "sf", "aw", "h2_frac",
-                "S", "vapor_frac")
+                "S", "vapor_frac", "E_corr", "i_corr")
         out = {k: np.zeros(n) for k in keys}
         rate, extras = self.rate, self.extras
         for i in range(n):
@@ -476,6 +497,7 @@ class L1Model:
             nAlO, nOH = max(y[ix["nAlO"]], 0.0), max(y[ix["nNa"]] - max(y[ix["nAlO"]], 0.0), 0.0)
             aw = pitzer.water_activity(nOH / (nW * MW_H2O), nAlO / (nW * MW_H2O), T, model=sc.activity_model)
             kmt = extras.kmt(T, c_oh, self.bins.d_m, self) if extras is not None else self.kmt0
+            self.set_rate_context(T, nOH, nAlO, nW * MW_H2O, V_l, c_oh)
             j, _ = rate.flux(T, c_oh, y[ix["film"]], y[ix["thb"]] if extras is not None else 0.0, kmt)
             r = float((np.broadcast_to(np.asarray(j, float), (self.nb,)) * self.bins.a0
                        * area_fraction(f, self.bins.g, self.f_s)).sum())
@@ -487,6 +509,9 @@ class L1Model:
             nh, na_, nv = max(y[ix["nH2"]], 0.0), max(y[ix["nAir"]], 0.0), max(y[ix["nV"]], 0.0)
             out["h2_frac"][i] = nh / max(nh + na_ + nv, 1.0e-30)  # magic:
             out["vapor_frac"][i] = nv / max(nh + na_ + nv, 1.0e-30)  # magic:
+            if hasattr(rate, "last"):
+                out["E_corr"][i] = rate.last().get("E_corr", 0.0)
+                out["i_corr"][i] = rate.last().get("i_corr", 0.0)
             kmt_s = float(np.mean(kmt))
             out["Da"][i] = damkohler(rate.kr(T), getattr(rate, "n", 1.0), c_oh, kmt_s)
             pg = max(P_tot - P_ATM, 0.0)
