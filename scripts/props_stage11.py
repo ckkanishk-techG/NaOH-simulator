@@ -1,0 +1,5 @@
+e("k_al_solid", 237.0, "W m-1 K-1", 150.0, 250.0, None, cat="transport", src="[SRC-T5] aluminium thermal conductivity", status="unverified")
+e("bed_packing", 0.5, "-", 0.3, 0.64, None, cat="transport", src="[SRC-T6] settled-bed solids volume fraction (random loose packing ~0.55-0.64)")
+e("bed_bruggeman", 1.5, "-", 1.0, 3.0, None, cat="transport", src="[SRC-T7] Bruggeman exponent for effective diffusivity in the bed")
+e("nat_conv_coeff", 0.15, "-", 0.05, 0.5, None, cat="transport", src="[SRC-T8] Nu = c Ra^(1/3) effective conductivity enhancement (turbulent natural convection)")
+e("nat_conv_ra_min", 1.0e3, "-", 1e2, 1e5, None, cat="transport", src="[SRC-T8] Rayleigh number below which conduction dominates")
