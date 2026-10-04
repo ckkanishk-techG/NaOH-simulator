@@ -5,12 +5,12 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from hydra.constants import F, R, T_REF
+from hydra.constants import T_REF, F, R
 from hydra.core.l1 import simulate
 from hydra.core.params import ParamSet
 from hydra.core.rates import ArrheniusModel
 from hydra.core.scenario import Scenario
-from hydra.electrochem.model import (ElectrochemModel, effective_arrhenius, polarization_curve, tafel_limit)
+from hydra.electrochem.model import ElectrochemModel, effective_arrhenius, polarization_curve, tafel_limit
 
 IDEAL = ParamSet({"ec_use_activities": 0.0})
 

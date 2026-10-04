@@ -65,7 +65,7 @@ CUM = ("E_amb", "E_cool", "E_outh", "E_in", "Q_rxn", "gen_H2", "vent_H2", "vent_
        "stack_H2", "purge_H2", "purge_air", "purge_v", "dose_w", "dose_na", "room_H2", "creep",
        "t_starve", "boil_mol", "evap_mol", "I_demand_t", "I_deliv_t")
 _SCALARS = ("nNa", "nAlO", "nGib", "nW", "nH2d", "nH2", "nAir", "nV", "T", "Tw", "film", "thb",
-            "m0", "m1", "m2")
+            "m0", "m1", "m2", "jg", "bN", "bV")
 _MOM_SCALE = (1.0e9, 1.0e3, 1.0e-3)  # magic:  numerical scaling of crystal moments
 
 
@@ -73,7 +73,7 @@ _MOM_SCALE = (1.0e9, 1.0e3, 1.0e-3)  # magic:  numerical scaling of crystal mome
 class SolverSettings:
     rtol: float = 1.0e-7
     atol: float = 1.0e-10
-    method: str = "LSODA"
+    method: str = "auto"  # LSODA for small systems, BDF when many size classes
     dt_out: float = 1.0
     max_step: float = 60.0
 
@@ -122,7 +122,7 @@ class L1Model:
         self.bins: Bins = make_bins(sc)
         self.nb = self.bins.nb
         self.mult = alloy_multiplier(sc.alloy, sc.activator_ppm, self.p)
-        self.rate = make_rate_model(sc.rate_model, self.p, self.mult)
+        self.rate = make_rate_model(sc.rate_model, self.p, self.mult, mass_transfer=extras is not None)
         self.idx = {k: self.nb + i for i, k in enumerate(_SCALARS)}
         self.cidx = {k: self.nb + len(_SCALARS) + i for i, k in enumerate(CUM)}
         self.ny = self.nb + len(_SCALARS) + len(CUM)
@@ -148,6 +148,7 @@ class L1Model:
         self.n_al_total0 = float(self.bins.n0.sum())
         self.events = {}
         self.n_valve_events = 0
+        self.state_for_bubbles: tuple[float, float] = (298.15, 1.0)
 
     # ------------------------------------------------------------------ initial state
     def initial_state(self) -> np.ndarray:
@@ -195,7 +196,7 @@ class L1Model:
 
     def set_rate_context(self, T: float, nOH: float, nAlO: float, kg_w: float, V_l: float, c_oh: float) -> None:
         """Give activity-based rate models the surface activities (Pitzer or ideal)."""
-        rate = self.rate
+        rate: Any = self.rate
         if not getattr(rate, "needs_activity", False):
             return
         m_oh, m_al = nOH / kg_w, nAlO / kg_w
@@ -223,7 +224,8 @@ class L1Model:
     def make_rhs(self) -> Callable[[float, np.ndarray], np.ndarray]:  # noqa: C901
         sc, p, ix, cx, nb = self.sc, self.p, self.idx, self.cidx, self.nb
         n0, a0, g_exp, d_m = self.bins.n0, self.bins.a0, self.bins.g, self.bins.d_m
-        T_amb, f_s, rate, extras, me = self.T_amb, self.f_s, self.rate, self.extras, self
+        T_amb, f_s, extras, me = self.T_amb, self.f_s, self.extras, self
+        rate: Any = self.rate
         evap_k, boil_k, kla = p["evap_k"], p["boil_k"], p["kla_H2"]
         cool_UA, T_cool = sc.cooling_UA_W_K, sc.coolant_T_C + KELVIN_OFFSET
         k_hd, t_w, emis, k_liq, beta = p["k_hdpe"], p["t_ves"], p["emis_hdpe"], p["k_liq"], p["rho_beta_T"]
@@ -244,6 +246,7 @@ class L1Model:
         has_valve = mode != "sealed"
         adiabatic = sc.adiabatic
         needs_act = getattr(rate, "needs_activity", False)
+        nsc, vsc = DB.get("bub_N_scale"), DB.get("bub_V_scale")
         use_act = getattr(rate, "use_act", False)
 
         def rhs(t: float, y: np.ndarray) -> np.ndarray:
@@ -252,7 +255,7 @@ class L1Model:
             nNa, nAlO, nGib = y[ix["nNa"]], max(y[ix["nAlO"]], 0.0), max(y[ix["nGib"]], 0.0)
             nW, nH2d, nH2 = max(y[ix["nW"]], 1.0e-9), max(y[ix["nH2d"]], 0.0), max(y[ix["nH2"]], 0.0)
             nAir, nV = max(y[ix["nAir"]], 0.0), max(y[ix["nV"]], 0.0)
-            T, Tw, film, thb = y[ix["T"]], y[ix["Tw"]], y[ix["film"]], y[ix["thb"]]
+            T, Tw, film = y[ix["T"]], y[ix["Tw"]], y[ix["film"]]
             nOH = max(nNa - nAlO, 0.0)
             V_l, c_oh, _ = me.liquid(y)
             Vg = me.gas_volume(y, V_l)
@@ -262,7 +265,15 @@ class L1Model:
             pv = nV * R * T / Vg
             P_tot = P_h2 + (nAir + nV) * R * T / Vg
             # ---- surface reaction
-            kmt = extras.kmt(T, c_oh, d_m, me) if extras is not None else me.kmt0
+            af = area_fraction(f, g_exp, f_s)
+            a_act = a0 * af
+            a_tot = float(a_act.sum())
+            if extras is not None:
+                jg_, bN_, bV_ = y[ix["jg"]], y[ix["bN"]] * nsc, y[ix["bV"]] * vsc
+                kmt = extras.kmt(T, c_oh, d_m, jg_, me)
+                theta = extras.blocked(bN_, bV_, nGib, a_tot, me)
+            else:
+                kmt, theta = me.kmt0, 0.0
             if needs_act:
                 m_oh_, m_al_ = nOH / kg_w, nAlO / kg_w
                 if use_act:
@@ -270,10 +281,15 @@ class L1Model:
                     rate.ctx = (m_oh_ * math.exp(ln_oh_), m_al_ * math.exp(ln_al_))
                 else:
                     rate.ctx = (c_oh, nAlO / (V_l / LITRE))
-            j, _cs = rate.flux(T, c_oh, film, thb if extras is not None else 0.0, kmt)
-            af = area_fraction(f, g_exp, f_s)
-            r_i = np.broadcast_to(np.asarray(j, float), (nb,)) * a0 * af
+            j, _cs = rate.flux(T, c_oh, film, theta, kmt)
+            r_i = np.broadcast_to(np.asarray(j, float), (nb,)) * a_act
             R_al = float(r_i.sum())
+            if extras is not None:
+                q_gas = 1.5 * R_al * R * T / max(P_tot, 1.0e3)  # magic: floor  (m3/s of H2 generated)
+                me.state_for_bubbles = (T, c_oh)
+                dN_, dV_ = extras.bubble_rates(bN_, bV_, q_gas / max(a_tot, 1.0e-12), me)  # magic: floor
+                dy[ix["bN"]], dy[ix["bV"]] = dN_ / nsc, dV_ / vsc
+                dy[ix["jg"]] = (q_gas / A_xs - jg_) / extras.jg_tau
             dy[:nb] = -r_i / n0
             # ---- precipitation (off by default)
             r_p = 0.0
@@ -361,9 +377,6 @@ class L1Model:
             dy[ix["T"]] = (-Q_lw - Q_cool - h_rt - h_dose) / C_tot
             dy[ix["Tw"]] = (Q_lw - Q_amb) / me.C_wall
             dy[ix["film"]] = rate.film_rate(film, T, c_oh)
-            if extras is not None:
-                dy[ix["thb"]] = extras.coverage_rate(thb, T, c_oh, np.broadcast_to(np.asarray(j, float), (nb,)),
-                                                     a0 * af, V_l, me)
             # ---- ledgers
             dy[cx["E_amb"]], dy[cx["E_cool"]] = Q_amb, Q_cool
             dy[cx["E_outh"]] = float(o @ np.array([h[I_H2], h[I_AIR], h[I_WG]]))
@@ -388,6 +401,11 @@ class L1Model:
         return rhs
 
     # ------------------------------------------------------------------ integration
+    def _method(self) -> str:
+        if self.st.method != "auto":
+            return self.st.method
+        return "LSODA" if self.nb <= 8 else "BDF"  # magic: size-class threshold
+
     def _breakpoints(self, t0: float, t1: float) -> list[float]:
         pts = {t for t, _ in self.sc.load_steps + self.sc.demand_h2_mol_s if t0 < t < t1}
         return sorted(pts)
@@ -430,7 +448,7 @@ class L1Model:
                         te = np.array([b])
                     elif te[-1] < b:
                         te = np.append(te, b)
-                sol = solve_ivp(rhs, (t, b), yc, method=self.st.method, t_eval=te, events=events,
+                sol = solve_ivp(rhs, (t, b), yc, method=self._method(), t_eval=te, events=events,
                                 rtol=self.st.rtol, atol=self.st.atol, max_step=self.st.max_step)
                 if not sol.success:
                     raise RuntimeError(f"integration failed: {sol.message}")
@@ -483,7 +501,7 @@ class L1Model:
         ix, cx, sc, p = self.idx, self.cidx, self.sc, self.p
         n = len(t)
         keys = ("T", "Tw", "P", "V_l", "c_oh", "c_al", "Vg", "al_g", "flow", "Da", "sf", "aw", "h2_frac",
-                "S", "vapor_frac", "E_corr", "i_corr")
+                "S", "vapor_frac", "E_corr", "i_corr", "theta_b")
         out = {k: np.zeros(n) for k in keys}
         rate, extras = self.rate, self.extras
         for i in range(n):
@@ -496,11 +514,17 @@ class L1Model:
             nW = max(y[ix["nW"]], 1.0e-9)
             nAlO, nOH = max(y[ix["nAlO"]], 0.0), max(y[ix["nNa"]] - max(y[ix["nAlO"]], 0.0), 0.0)
             aw = pitzer.water_activity(nOH / (nW * MW_H2O), nAlO / (nW * MW_H2O), T, model=sc.activity_model)
-            kmt = extras.kmt(T, c_oh, self.bins.d_m, self) if extras is not None else self.kmt0
+            a_act = self.bins.a0 * area_fraction(f, self.bins.g, self.f_s)
+            if extras is not None:
+                kmt = extras.kmt(T, c_oh, self.bins.d_m, y[ix["jg"]], self)
+                theta = extras.blocked(y[ix["bN"]] * DB.get("bub_N_scale"), y[ix["bV"]] * DB.get("bub_V_scale"),
+                                       max(y[ix["nGib"]], 0.0), float(a_act.sum()), self)
+            else:
+                kmt, theta = self.kmt0, 0.0
             self.set_rate_context(T, nOH, nAlO, nW * MW_H2O, V_l, c_oh)
-            j, _ = rate.flux(T, c_oh, y[ix["film"]], y[ix["thb"]] if extras is not None else 0.0, kmt)
-            r = float((np.broadcast_to(np.asarray(j, float), (self.nb,)) * self.bins.a0
-                       * area_fraction(f, self.bins.g, self.f_s)).sum())
+            j, _ = rate.flux(T, c_oh, y[ix["film"]], theta, kmt)
+            r = float((np.broadcast_to(np.asarray(j, float), (self.nb,)) * a_act).sum())
+            out["theta_b"][i] = theta
             out["T"][i], out["Tw"][i], out["P"][i] = T, y[ix["Tw"]], P_tot
             out["V_l"][i], out["c_oh"][i], out["c_al"][i], out["Vg"][i] = V_l, c_oh, c_al, Vg
             out["al_g"][i] = float((f * self.bins.n0).sum()) * 26.9815385  # magic:  (g/mol)
@@ -533,7 +557,7 @@ class L1Model:
         out["nH2_gas"] = ys[ix["nH2"]]
         out["nAir"] = ys[ix["nAir"]]
         out["film"] = ys[ix["film"]]
-        out["theta_b"] = ys[ix["thb"]]
+        out["jg"] = ys[ix["jg"]]
         lfl = DB.get("lfl_h2")
         out["room_pct"] = out["room_H2"] * R * 298.15 / P_ATM / sc.room_volume_m3 * 100.0  # magic:
         del lfl
@@ -590,6 +614,13 @@ class L1Model:
         led["energy"] = (dH - flux) / scale
         return led
 
+    def particle_sizes(self, res: SimResult) -> np.ndarray:
+        """Characteristic dimension [m] of every size class versus time, shape (nt, nb)."""
+        assert res.y is not None
+        f = np.maximum(res.y[: self.nb].T, 0.0)
+        exp = {2.0 / 3.0: 1.0 / 3.0, 0.5: 0.5, 0.0: 1.0}[self.bins.g]
+        return self.bins.d_m[None, :] * f**exp
+
     def summarize(self, res: SimResult) -> dict[str, float]:
         s, t = res.series, res.t
         gen = float(s["h2_gen_mol"][-1])
@@ -618,4 +649,8 @@ class L1Model:
 def simulate(sc: Scenario, params: ParamSet | None = None, settings: SolverSettings | None = None,
              extras: Any = None) -> SimResult:
     """Convenience wrapper: build the model and run it."""
+    if extras is None and sc.fidelity == "L2":
+        from ..transport.l2 import L2Extras
+
+        extras = L2Extras(params or ParamSet(), sc)
     return L1Model(sc, params, settings, extras).run()

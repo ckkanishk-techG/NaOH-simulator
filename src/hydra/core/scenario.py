@@ -66,6 +66,7 @@ class Scenario(BaseModel):
     polymorph: Literal["gibbsite", "bayerite"] = "gibbsite"
     activity_model: Literal["pitzer", "debye_huckel"] = "pitzer"
     fidelity: Literal["L1", "L2"] = "L1"
+    bubble_blocking: bool = False  # L2: surface blocking by bubbles/precipitate (unconstrained params -> off)
 
     @field_validator("load_steps", "demand_h2_mol_s")
     @classmethod

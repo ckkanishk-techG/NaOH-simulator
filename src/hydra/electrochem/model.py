@@ -102,7 +102,18 @@ class ElectrochemModel:
             return 0.0, 0.0
         _, i = self.couple(T, a_oh, a_al)
         j = self.mult * film * (1.0 - theta_b) * i / (3.0 * F)
-        return j, c
+        if not self.mt:
+            return j, c
+        # boundary-layer limitation: local power-law kinetics j = kr c_s^n_loc in series with k_mt
+        _, i2 = self.couple(T, 0.9 * a_oh, a_al)  # magic: 10 % probe for the local order
+        j2 = self.mult * film * (1.0 - theta_b) * i2 / (3.0 * F)
+        n_loc = min(max(math.log(j / j2) / math.log(1.0 / 0.9), 0.1), 2.0) if j2 > 0 else 1.0  # magic: bounds
+        kr = j / max(c, 1.0e-12) ** n_loc  # magic: floor
+        km = np.asarray(kmt, float) * 1.0e3
+        from ..core.rates import _series_resistance
+
+        cs, jj = _series_resistance(kr, n_loc, c, km)
+        return jj, cs
 
     def film_rate(self, film: float, T: float, c: float) -> float:
         p = self.p

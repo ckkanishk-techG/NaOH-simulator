@@ -41,6 +41,19 @@ class RateModel(Protocol):
         """Surface rate coefficient (j at c = 1 mol/L, no film/coverage)."""
 
 
+def _series_resistance(kr: float, n: float, c: float, km: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Solve kr cs^n = km (c - cs) for the surface concentration (damped Newton, early exit)."""
+    cs = c / (1.0 + kr * max(c, 1.0e-12) ** (n - 1.0) / km)  # magic: floor; exact for n = 1
+    for _ in range(12):  # magic: Newton iterations cap
+        g = kr * cs**n - km * (c - cs)
+        dg = kr * n * np.maximum(cs, 1.0e-12) ** (n - 1.0) + km  # magic: floor
+        step = g / dg
+        cs = np.minimum(np.maximum(cs - step, 0.0), c)
+        if np.max(np.abs(step)) < 1.0e-13 * max(c, 1.0e-12):  # magic: convergence tolerance
+            break
+    return cs, kr * cs**n
+
+
 class ArrheniusModel:
     name = "arrhenius"
 
@@ -61,13 +74,7 @@ class ArrheniusModel:
             return kr * c**self.n, c
         # solve kr*cs^n = kmt*1000*(c-cs)  (kmt in m/s, c in mol/L -> mol/m3 factor 1000)
         km = np.asarray(kmt, float) * 1.0e3
-        n = self.n
-        cs = np.full_like(np.asarray(km), c) if np.ndim(km) else np.array(c)
-        for _ in range(30):  # magic:  Newton iterations
-            g = kr * cs**n - km * (c - cs)
-            dg = kr * n * np.maximum(cs, 1.0e-12) ** (n - 1.0) + km
-            cs = np.clip(cs - g / dg, 0.0, c)
-        j = kr * cs**n
+        cs, j = _series_resistance(kr, self.n, c, km)
         return j, cs
 
     def film_rate(self, film: float, T: float, c: float) -> float:
@@ -77,15 +84,15 @@ class ArrheniusModel:
         return 0.0
 
 
-def make_rate_model(name: str, p: ParamSet, mult: float) -> RateModel:
+def make_rate_model(name: str, p: ParamSet, mult: float, mass_transfer: bool = False) -> RateModel:
     if name == "arrhenius":
-        return ArrheniusModel(p, mult, False)
+        return ArrheniusModel(p, mult, mass_transfer)
     if name == "mass_transfer":
         return ArrheniusModel(p, mult, True)
     if name == "electrochemical":
         from ..electrochem.model import ElectrochemModel
 
-        return ElectrochemModel(p, mult)
+        return ElectrochemModel(p, mult, mass_transfer)
     raise ValueError(f"unknown rate model {name!r}")
 
 
