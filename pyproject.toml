@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hydra-sim"
+version = "0.1.0"
+description = "Local-only multi-physics digital twin of Al-NaOH-H2O hydrogen generation + AEM fuel cell (HYDRA)."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "pydantic>=2.6",
+  "numpy>=1.26",
+  "scipy>=1.12",
+  "pint>=0.23",
+]
+
+[project.optional-dependencies]
+fast = ["numba>=0.59"]
+jax = ["jax>=0.4.25"]
+bayes = ["emcee>=3.1", "SALib>=1.5", "scikit-learn>=1.4"]
+server = ["redis>=5", "rq>=1.16", "psycopg[binary]>=3.1", "argon2-cffi>=23"]
+dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.4", "mypy>=1.9", "httpx>=0.27"]
+
+[project.scripts]
+hydra-sim = "hydra.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hydra"]
+[tool.hatch.build.targets.wheel.force-include]
+"src/hydra/web/static" = "hydra/web/static"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src/hydra"]

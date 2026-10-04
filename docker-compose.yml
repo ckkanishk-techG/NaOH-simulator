@@ -1,0 +1,23 @@
+# Server mode skeleton. Worker/auth/job limits are completed in build stage 16.
+services:
+  app:
+    build: .
+    environment: { HYDRA_MODE: server, HYDRA_DATA_DIR: /data }
+    volumes: [ "hydra-data:/data" ]
+    depends_on: [ redis, postgres ]
+  worker:
+    build: .
+    command: ["python", "-c", "print('worker placeholder: stage 16')"]
+    depends_on: [ redis ]
+  redis:
+    image: redis:7-alpine
+  postgres:
+    image: postgres:16-alpine
+    environment: { POSTGRES_PASSWORD: change-me, POSTGRES_DB: hydra }
+    volumes: [ "pg-data:/var/lib/postgresql/data" ]
+  caddy:
+    image: caddy:2-alpine
+    ports: [ "443:443" ]
+    volumes: [ "./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" ]
+    depends_on: [ app ]
+volumes: { hydra-data: {}, pg-data: {} }

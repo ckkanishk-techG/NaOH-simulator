@@ -1,0 +1,5 @@
+# LAN HTTPS with Caddy's internal CA (no external ACME).
+hydra.lan {
+    tls internal
+    reverse_proxy app:8765
+}

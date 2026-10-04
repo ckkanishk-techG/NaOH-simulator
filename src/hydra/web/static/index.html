@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HYDRA</title>
+<style>
+  body{margin:0;background:#14161a;color:#e8eaed;font:14px/1.5 system-ui,sans-serif;padding:2rem}
+  code{background:#23262d;padding:.1em .4em;border-radius:3px}
+</style>
+</head>
+<body>
+<h1>HYDRA</h1>
+<p>Al–NaOH–H₂O digital twin — skeleton (build stage 1). The React UI arrives in stage 8.</p>
+<p id="s">Checking local API…</p>
+<p><em>Predictive research model, not a safety certification.</em></p>
+<script>
+fetch("/api/health").then(r=>r.json()).then(h=>{
+  document.getElementById("s").textContent="API "+h.status+" · v"+h.version+" · mode "+h.mode+" · telemetry: none";
+});
+</script>
+</body>
+</html>
