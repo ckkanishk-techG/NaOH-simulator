@@ -37,13 +37,16 @@ def run(scenario_json):
 
 def main() -> None:
     OUT.mkdir(exist_ok=True)
+    shutil.copy(ROOT / "prototype" / "hydra_l1_prototype.html", OUT / "index.html")  # main page: the standalone prototype UI
+    eng = OUT / "engine"
+    eng.mkdir(exist_ok=True)
     files = {f"hydra/{m}.py": (SRC / f"{m}.py").read_text() for m in MODULES}
     files["hydra/data/properties.json"] = (SRC / "data" / "properties.json").read_text()
     files["glue.py"] = GLUE
-    (OUT / "engine.json").write_text(json.dumps(files))
-    shutil.copy(ROOT / "scripts" / "pages" / "index.html", OUT / "index.html")
-    shutil.copy(ROOT / "scripts" / "pages" / "worker.js", OUT / "worker.js")
-    print(f"site/ built: {len(files)} engine files, {(OUT / 'engine.json').stat().st_size / 1e3:.0f} kB")
+    (eng / "engine.json").write_text(json.dumps(files))
+    shutil.copy(ROOT / "scripts" / "pages" / "index.html", eng / "index.html")
+    shutil.copy(ROOT / "scripts" / "pages" / "worker.js", eng / "worker.js")
+    print(f"site/ built: {len(files)} engine files, {(eng / 'engine.json').stat().st_size / 1e3:.0f} kB")
 
 
 if __name__ == "__main__":
