@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HYDRA – Al–NaOH–H₂O simulator</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1b1f24;--mut:#5c6670;--bd:#d9dee4;--ac:#0b6bcb;--warn:#b45309;--bad:#b42318;--ok:#157347;--grid:#e6e9ed}
+@media (prefers-color-scheme:dark){:root{--bg:#14161a;--card:#1c1f25;--fg:#e8eaed;--mut:#9aa4af;--bd:#2c313a;--ac:#5aa9ff;--warn:#f0b35a;--bad:#ff7b72;--ok:#56d364;--grid:#2a2f37}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif}
+header,main{max-width:1180px;margin:0 auto;padding:0 16px}header{padding-top:20px}
+h1{margin:0;font-size:22px}h2{font-size:15px;margin:0 0 10px}
+.sub{color:var(--mut);margin:2px 0 12px}
+.banner{background:var(--card);border:1px solid var(--bd);border-left:4px solid var(--warn);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--mut)}
+.grid{display:grid;grid-template-columns:320px 1fr;gap:16px;margin:16px 0 40px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:14px}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 2px}
+input,select{width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:5px;background:var(--bg);color:var(--fg);font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{margin-top:14px;width:100%;padding:9px;border:0;border-radius:6px;background:var(--ac);color:#fff;font:600 14px system-ui;cursor:pointer}
+button.sec{background:transparent;color:var(--ac);border:1px solid var(--bd);margin-top:8px}
+button:disabled{opacity:.55;cursor:wait}
+#status{color:var(--mut);margin:8px 0 0;min-height:20px;font-size:13px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.tile{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;background:var(--card)}
+.tile b{display:block;font-size:19px;font-variant-numeric:tabular-nums}.tile span{font-size:12px;color:var(--mut)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:860px){.charts{grid-template-columns:1fr}}
+canvas{width:100%;height:230px;display:block}
+.flag{padding:5px 8px;border-radius:5px;margin:4px 0;font-size:13px;border:1px solid var(--bd)}
+.flag.warn{border-left:4px solid var(--warn)}.flag.danger{border-left:4px solid var(--bad)}.flag.info{border-left:4px solid var(--ac)}
+table{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}td{padding:2px 12px 2px 0}
+.mut{color:var(--mut);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>HYDRA <span class="mut">Al–NaOH–H₂O digital twin</span></h1>
+  <p class="sub">The actual Python physics engine (thermo, Pitzer activities, kinetics, heat, gas, relief valve) runs here in your browser via WebAssembly. Nothing is sent to a server.</p>
+  <div class="banner"><b>Predictive research model, not a safety certification.</b> All kinetic and thermal constants are <b>uncalibrated priors</b>:
+    use the trends and conservation checks, not the absolute numbers, until the model is calibrated on your own measurements.</div>
+</header>
+<main class="grid">
+  <section class="card">
+    <h2>Scenario</h2>
+    <div class="row"><div><label>Al mass (g)</label><input id="al_mass_g" type="number" step="any" value="5"></div>
+      <div><label>Form</label><select id="form"><option>foil</option><option>powder</option><option>wire</option><option>can</option><option>flake</option></select></div></div>
+    <div class="row"><div><label>Thickness / diameter (µm)</label><input id="dim_um" type="number" step="any" value="20"></div>
+      <div><label>NaOH (M)</label><input id="c_naoh_M" type="number" step="any" value="2"></div></div>
+    <div class="row"><div><label>Liquid (mL)</label><input id="v_liq_mL" type="number" step="any" value="200"></div>
+      <div><label>Vessel (mL)</label><input id="v_vessel_mL" type="number" step="any" value="500"></div></div>
+    <div class="row"><div><label>Start T (°C)</label><input id="T0_C" type="number" step="any" value="25"></div>
+      <div><label>Ambient T (°C)</label><input id="T_amb_C" type="number" step="any" value="25"></div></div>
+    <div class="row"><div><label>Gas handling</label><select id="mode"><option>regulated</option><option>relief</option><option>sealed</option><option>open</option></select></div>
+      <div><label>Relief (bar g)</label><input id="p_relief_bar_g" type="number" step="any" value="1.5"></div></div>
+    <div class="row"><div><label>Cooling UA (W/K)</label><input id="cooling_UA_W_K" type="number" step="any" value="0"></div>
+      <div><label>Stack cells</label><input id="cells" type="number" step="1" value="4"></div></div>
+    <div class="row"><div><label>Duration (s)</label><input id="duration_s" type="number" step="any" value="3600"></div>
+      <div><label>Rate model</label><select id="rate_model"><option>arrhenius</option><option>mass_transfer</option><option>electrochemical</option></select></div></div>
+    <button id="run" disabled>Run simulation</button>
+    <button id="bench" class="sec" disabled>Reset to benchmark</button>
+    <div id="status">Starting engine…</div>
+  </section>
+  <section>
+    <div class="tiles" id="tiles"></div>
+    <div class="card" id="saf" hidden><h2>Safety screen</h2><div id="flags"></div></div>
+    <div class="charts" id="charts" style="margin-top:12px"></div>
+    <div class="card" id="led" style="margin-top:12px" hidden><h2>Conservation check (should be ≈ 0)</h2><div id="ledger"></div>
+      <p class="mut" id="rng"></p><button class="sec" id="csv" style="width:auto;padding:6px 12px">Download CSV</button></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const IDS = ["al_mass_g","form","dim_um","c_naoh_M","v_liq_mL","v_vessel_mL","T0_C","T_amb_C","mode","p_relief_bar_g","cooling_UA_W_K","cells","duration_s","rate_model"];
+const DEFAULT = Object.fromEntries(IDS.map(i => [i, $(i).value]));
+const NUM = new Set(["al_mass_g","dim_um","c_naoh_M","v_liq_mL","v_vessel_mL","T0_C","T_amb_C","p_relief_bar_g","cooling_UA_W_K","cells","duration_s"]);
+const worker = new Worker("worker.js");
+let last = null;
+worker.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === "status") $("status").textContent = m.msg;
+  else if (m.type === "ready") { $("run").disabled = false; $("bench").disabled = false; if (!last) $("status").textContent = "Engine ready."; }
+  else if (m.type === "error") { $("status").innerHTML = ""; const p = document.createElement("pre"); p.style.cssText = "white-space:pre-wrap;color:var(--bad);font-size:12px"; p.textContent = m.msg; $("status").appendChild(p); $("run").disabled = false; }
+  else if (m.type === "result") { last = m.data; render(m.data); $("status").textContent = `Done in ${m.seconds.toFixed(1)} s (in your browser).`; $("run").disabled = false; }
+};
+function scenario() {
+  const s = {};
+  for (const i of IDS) s[i] = NUM.has(i) ? Number($(i).value) : $(i).value;
+  s.cells = Math.round(s.cells);
+  return s;
+}
+$("run").onclick = () => { $("run").disabled = true; $("status").textContent = "Simulating…"; worker.postMessage({ type: "run", scenario: scenario() }); };
+$("bench").onclick = () => { for (const i of IDS) $(i).value = DEFAULT[i]; };
+worker.postMessage({ type: "init" });
+
+const fmt = (v, d = 3) => v == null ? "–" : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 1e-2) ? v.toExponential(2) : Number(v.toFixed(d)).toString();
+function render(d) {
+  const s = d.summary;
+  const tiles = [["Total H₂", fmt(s.h2_total_stp_L,2), "L (STP)"], ["Conversion", fmt(s.conversion_pct,1), "% of Al"], ["Peak H₂ flow", fmt(s.peak_flow_mol_s*22.414*60,2), "L/min STP"],
+    ["Time to 90 %", fmt(s.t90_s/60,1), "min"], ["Peak liquid T", fmt(s.peak_T_C,1), "°C"], ["Peak pressure", fmt(s.peak_P_bar_g,2), "bar g"],
+    ["Min safety factor", fmt(s.min_sf,2), "(–)"], ["Vented H₂", fmt(s.vent_pct,1), "% of H₂"], ["Peak room H₂", fmt(s.peak_room_pct,3), "vol %"]];
+  $("tiles").innerHTML = tiles.map(([a,b,c]) => `<div class="tile"><span>${a}</span><b>${b}</b><span>${c}</span></div>`).join("");
+  $("saf").hidden = false;
+  $("flags").innerHTML = (d.safety.flags.length ? d.safety.flags.map(f => `<div class="flag ${f.level}"><b>${f.level.toUpperCase()}</b> · ${f.message}</div>`).join("") : '<div class="flag info">No flags raised.</div>')
+    + `<p class="mut">${d.disclaimer}</p>`;
+  const t = d.t.map(x => x / 60), S = {...d.series};
+  const conv = (a, f) => a && a.map(v => v == null ? null : f(v));
+  S.T = conv(S.T, v => v - 273.15); S.Tw = conv(S.Tw, v => v - 273.15); S.P = conv(S.P, v => (v - 101325) / 1e5);
+  const specs = [["Cumulative H₂ (L, STP)", S.h2_stp_L], ["H₂ flow (mol/s)", S.flow], ["Temperature (°C): liquid / wall", S.T, S.Tw], ["Pressure (bar g)", S.P],
+    ["Al remaining (g)", S.al_g], ["[OH⁻] / [Al(OH)₄⁻] (mol/L)", S.c_oh, S.c_al]];
+  $("charts").innerHTML = "";
+  specs.forEach(([title, a, b]) => { const c = document.createElement("div"); c.className = "card"; c.innerHTML = `<h2>${title} <span class="mut">· time in min</span></h2><canvas></canvas>`; $("charts").appendChild(c); plot(c.querySelector("canvas"), t, [a, b].filter(Boolean)); });
+  $("led").hidden = false;
+  $("ledger").innerHTML = "<table>" + Object.entries(d.ledger).map(([k, v]) => `<tr><td>${k}</td><td>${v.toExponential(2)}</td></tr>`).join("") + "</table>";
+  $("rng").textContent = d.ranges.length ? "Range warnings: " + d.ranges.join("; ") : "";
+}
+function plot(cv, x, ys) {
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr);
+  const css = getComputedStyle(document.documentElement), col = ["--ac", "--warn"].map(v => css.getPropertyValue(v).trim()), mut = css.getPropertyValue("--mut").trim(), grid = css.getPropertyValue("--grid").trim();
+  const all = ys.flat().filter(v => v != null); let lo = Math.min(...all), hi = Math.max(...all); if (hi - lo < 1e-12) { hi = lo + 1; }
+  const pad = (hi - lo) * 0.05; if (lo >= 0 && lo - pad < 0) lo = 0; else lo -= pad; hi += pad;
+  const L = 62, R = 12, T = 8, B = 24, xm = x[x.length - 1] || 1;
+  const X = v => L + (v / xm) * (W - L - R), Y = v => H - B - ((v - lo) / (hi - lo)) * (H - T - B);
+  g.font = "11px system-ui"; g.fillStyle = mut; g.strokeStyle = grid; g.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4, y = Y(v); g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke(); g.textAlign = "right"; g.fillText(fmt(v, 2), L - 4, y + 4); }
+  for (let i = 0; i <= 4; i++) { const v = xm * i / 4; g.textAlign = "center"; g.fillText(fmt(v, 1), X(v), H - 8); }
+  
+  ys.forEach((y, k) => { g.beginPath(); g.strokeStyle = col[k]; g.lineWidth = 1.8; let on = false;
+    y.forEach((v, i) => { if (v == null) { on = false; return; } on ? g.lineTo(X(x[i]), Y(v)) : g.moveTo(X(x[i]), Y(v)); on = true; }); g.stroke(); });
+}
+$("csv").onclick = () => {
+  if (!last) return; const k = Object.keys(last.series), rows = ["t_s," + k.join(",")];
+  last.t.forEach((t, i) => rows.push([t, ...k.map(n => last.series[n][i] ?? "")].join(",")));
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" })); a.download = "hydra_run.csv"; a.click();
+};
+addEventListener("resize", () => last && render(last));
+</script>
+</body>
+</html>
