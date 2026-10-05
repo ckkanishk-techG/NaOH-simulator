@@ -153,3 +153,14 @@ def test_param_override_changes_rate():
     base = simulate(excess(al_mass_g=0.3, c_naoh_M=2.0))
     fast = simulate(excess(al_mass_g=0.3, c_naoh_M=2.0), ParamSet({"k25": 4e-4}))
     assert fast.summary["t90_s"] < base.summary["t90_s"]
+
+
+def test_open_vessel_never_pulls_vacuum_and_ledger_closes() -> None:
+    """An open vent must draw ambient air back in as the vessel cools (regression: P fell to 0.87 bar abs)."""
+    sc = Scenario(al_mass_g=0.4, form="foil", dim_um=5, c_naoh_M=4, v_liq_mL=30, T0_C=23, T_amb_C=23, v_vessel_mL=250,
+                  mode="open", cells=0, duration_s=1800)
+    r = simulate(sc)
+    p_bar = r.series["P"] / 1.0e5
+    assert p_bar.min() > 1.0132 - 2e-3 and p_bar.max() < 1.0132 + 2e-3
+    assert abs(r.ledger["energy"]) < 1e-3
+    assert r.summary["conversion_pct"] > 99.0

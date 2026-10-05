@@ -220,6 +220,22 @@ class L1Model:
         smooth = dp / (dp + self.dp_smooth)  # ~ dp^1.5 near zero: finite Jacobian
         return cd * area * P * psi * smooth / math.sqrt(R * T * M)
 
+    def inflow_mol(self, area: float, P: float, M: float) -> float:
+        """Ambient air drawn in through an open vent when the headspace is below ambient pressure [mol/s].
+
+        Same orifice law with the ambient side as the source (dry air at T_amb; humidity of the room air is neglected)."""
+        if P >= P_ATM:
+            return 0.0
+        g, cd, pr = self.gamma, self.p["valve_Cd"], P / P_ATM
+        crit = (2.0 / (g + 1.0)) ** (g / (g - 1.0))
+        if pr <= crit:
+            psi = math.sqrt(g) * (2.0 / (g + 1.0)) ** ((g + 1.0) / (2.0 * (g - 1.0)))
+        else:
+            psi = math.sqrt(2.0 * g / (g - 1.0) * (pr ** (2.0 / g) - pr ** ((g + 1.0) / g)))
+        dp = P_ATM - P
+        smooth = dp / (dp + self.dp_smooth)
+        return cd * area * P_ATM * psi * smooth / math.sqrt(R * self.T_amb * M)
+
     # ------------------------------------------------------------------ RHS
     def make_rhs(self) -> Callable[[float, np.ndarray], np.ndarray]:  # noqa: C901
         sc, p, ix, cx, nb = self.sc, self.p, self.idx, self.cidx, self.nb
@@ -316,9 +332,10 @@ class L1Model:
             n_gas = nH2 + nAir + nV
             xv3 = np.array([nH2, nAir, nV]) / n_gas if n_gas > 0 else np.array([0.0, 1.0, 0.0])
             M_mix = xv3[0] * MW_H2 + xv3[1] * MW_AIR + xv3[2] * MW_H2O
-            vent = 0.0
+            vent = air_in = 0.0
             if mode == "open":
                 vent = me.orifice_mol(me.Av_open, P_tot, T, M_mix)
+                air_in = me.inflow_mol(me.Av_open, P_tot, MW_AIR)
             elif has_valve and me.valve_open:
                 vent = me.orifice_mol(me.Av_relief, P_tot, T, M_mix)
             stack = purge = I_dem = I_del = 0.0
@@ -345,7 +362,7 @@ class L1Model:
             dy[ix["nW"]] = -3.0 * R_al - e_tot + u_w
             dy[ix["nH2d"]] = 1.5 * R_al - q_h2
             dy[ix["nH2"]] = q_h2 - o[0]
-            dy[ix["nAir"]] = -o[1]
+            dy[ix["nAir"]] = -o[1] + air_in
             dy[ix["nV"]] = e_tot - o[2]
             # ---- energy
             h = hf + cp * (T - T_REF)
@@ -374,7 +391,7 @@ class L1Model:
             Q_amb += emis * SIGMA_SB * A_out * (Tw**4 - T_amb**4)
             if adiabatic:
                 Q_amb = 0.0
-            dy[ix["T"]] = (-Q_lw - Q_cool - h_rt - h_dose) / C_tot
+            dy[ix["T"]] = (-Q_lw - Q_cool - h_rt - h_dose + air_in * cp[I_AIR] * (T_amb - T)) / C_tot
             dy[ix["Tw"]] = (Q_lw - Q_amb) / me.C_wall
             dy[ix["film"]] = rate.film_rate(film, T, c_oh)
             # ---- ledgers
@@ -382,7 +399,7 @@ class L1Model:
             dy[cx["E_outh"]] = float(o @ np.array([h[I_H2], h[I_AIR], h[I_WG]]))
             h_in_dose = u_w * (hf[I_WL] + cp[I_WL] * (T_amb - T_REF)) + u_na * (
                 hf[I_NA] + cp[I_NA] * (T_amb - T_REF) + hf[I_OH] + cp[I_OH] * (T_amb - T_REF))
-            dy[cx["E_in"]] = h_in_dose
+            dy[cx["E_in"]] = h_in_dose + air_in * (hf[I_AIR] + cp[I_AIR] * (T_amb - T_REF))
             dy[cx["Q_rxn"]] = -R_al * (-h[I_AL] - h[I_OH] - 3.0 * h[I_WL] + h[I_ALO] + 1.5 * h[I_H2D])
             dy[cx["gen_H2"]] = 1.5 * R_al
             dy[cx["vent_H2"]], dy[cx["vent_air"]], dy[cx["vent_v"]] = vent * xv3

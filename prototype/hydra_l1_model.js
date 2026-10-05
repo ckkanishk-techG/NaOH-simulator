@@ -139,6 +139,7 @@ export function step(s, sc, p, dt, u = 0, cDose = 0) {
     const allow = Math.max(Plim - pv, 0) * Vh / RT, ex = nNC - allow;
     if (ex > 0) { const x = s.nH2 / nNC; s.nH2 -= ex * x; s.nAir = Math.max(s.nAir - ex * (1 - x), 0); s.vent += ex * x; if (sc.mode !== 'open') s.nRoom += ex * x; }
   }
+  if (sc.mode === 'open') { const nEq = Math.max(P_ATM - pv, 0) * Vh / RT; if (s.nAir + s.nH2 < nEq) s.nAir += nEq - (s.nAir + s.nH2); } // open vent draws ambient air back in (no vacuum)
   s.nRoom -= s.nRoom * sc.ach / 3600 * dt;
   s.P = (s.nAir + s.nH2) * RT / Vh + pv;
   if (sc.cells) { const pol = polar(s.I / sc.cellArea, p, Math.max(s.P / 1e5, 1)); s.V = pol.V * sc.cells; s.Wel += s.V * s.I * dt; }
