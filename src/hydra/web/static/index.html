@@ -11,13 +11,15 @@
 </head>
 <body>
 <h1>HYDRA</h1>
-<p>Al–NaOH–H₂O digital twin — skeleton (build stage 1). The React UI arrives in stage 8.</p>
+<p>Al–NaOH–H₂O digital twin. The backend (physics, calibration, API) is implemented; the React UI is not built yet.</p>
 <p id="s">Checking local API…</p>
+<p id="h" hidden>No HYDRA backend is reachable from this page. HYDRA runs locally: <code>pip install -e .</code> then <code>hydra-sim</code>
+(or <code>docker compose up</code> for server mode). Static hosting such as Cloudflare Pages can show this page but cannot run the Python solver.</p>
 <p><em>Predictive research model, not a safety certification.</em></p>
 <script>
 fetch("/api/health").then(r=>r.json()).then(h=>{
   document.getElementById("s").textContent="API "+h.status+" · v"+h.version+" · mode "+h.mode+" · telemetry: none";
-});
+}).catch(()=>{document.getElementById("s").textContent="API not reachable";document.getElementById("h").hidden=false;});
 </script>
 </body>
 </html>
