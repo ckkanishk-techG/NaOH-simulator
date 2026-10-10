@@ -404,17 +404,46 @@ export function autoTune(base, cfg) {
   return { kp, ki: kp / tau, kd: 0, K, tau };
 }
 
+// ---------- live serial (Web Serial) ----------
+// One CSV line per sample, same format as the Arduino logger: t_s,T1_C,T2_C,P_bar_g,flow_L_min,I_A,V_V  (nan / blank = missing).
+export function parseFrame(line) {
+  const s = line.trim(); if (!s || s[0] === '#' || /^t_(s|ms)/.test(s)) return null;
+  const p = s.split(','); if (p.length < 2) return null;
+  const v = [];
+  for (let i = 0; i < 7; i++) {
+    const x = (p[i] === undefined ? '' : p[i]).trim().toLowerCase();
+    if (x === '' || x === 'nan' || x === 'na' || x === 'null') { v.push(NaN); continue; }
+    const n = Number(x); if (!isFinite(n)) return null; v.push(n);
+  }
+  if (!isFinite(v[0])) return null;
+  return { t: v[0], T1: v[1], T2: v[2], P: v[3], flow: v[4], I: v[5], V: v[6] };
+}
+export function liveCreate() { return { kind: 'live', latest: null, tRel: 0, tPrev: null, cumL: 0, frames: [], nFrames: 0, lines: 0, gaps: 0, resets: 0, tauT: 15 }; }
+// Cumulative H2 [mL STP] = integral of the flow column (L/min at STP), gaps longer than 5 s are NOT integrated (counted in .gaps).
+// Time is the logger's own clock (relative), so a stalled browser does not distort it; a logger reboot (t decreasing) is counted in .resets.
+export function liveIngest(src, fr) {
+  src.nFrames++;
+  if (src.tPrev == null) src.tPrev = fr.t;
+  const dt = fr.t - src.tPrev; src.tPrev = fr.t;
+  if (dt < 0) src.resets++;
+  else if (dt > 0) { src.tRel += dt; if (isFinite(fr.flow)) { if (dt > 5) src.gaps++; src.cumL += fr.flow * Math.min(dt, 5) / 60; } } // flow is integrated as reported (no clamping at 0: clamping turns zero-mean noise into a positive volume bias)
+  if (src.frames.length < 100000) src.frames.push(fr);
+  src.latest = { t: src.tRel, v: src.cumL * 1000, T: fr.T1, fr };
+  return src;
+}
+
 // ---------- live twin (EnKF) ----------
 // src.kind === 'data': replay a measured dataset (prep()'d). src.kind === 'simtest': filter test against a simulated plant (NOT real data).
 export function twinCreate(base, nm, seed, sc, src) {
-  const rng = mulberry32(seed), lag = src.kind === 'data' ? src.run.tauT : 15;
+  const rng = mulberry32(seed), lag = src.kind === 'data' ? src.run.tauT : (src.tauT || 15);
   const members = Array.from({ length: nm }, () => { const p = drawParams(base, rng, ['ks25', 'tauInd', 'UA']); const s = init(sc, p); s.Tm = s.T; return { p, s }; });
-  const tw = { rng, sc, src, lag, members, hist: [], fc: null, ks0: base.ks25, done: false, hasT: src.kind === 'simtest' || !!(src.run && src.run.T && src.run.sT) };
+  const tw = { rng, sc, src, lag, members, hist: [], fc: null, ks0: base.ks25, done: false, hasT: src.kind === 'simtest' || src.kind === 'live' || !!(src.run && src.run.T && src.run.sT) };
   if (src.kind === 'simtest') { const pT = { ...base, ks25: base.ks25 * 1.6, tauInd: base.tauInd * 2 }; const ts = init(sc, pT); ts.Tm = ts.T; tw.truth = { p: pT, s: ts, drift: 0 }; }
   return tw;
 }
 function solve(Pyy) { const m = Pyy.length; if (m === 1) return [[1 / Pyy[0][0]]]; const d = Pyy[0][0] * Pyy[1][1] - Pyy[0][1] * Pyy[1][0]; return [[Pyy[1][1] / d, -Pyy[0][1] / d], [-Pyy[1][0] / d, Pyy[0][0] / d]]; }
 export function twinTick(tw, adv = 20) {
+  if (tw.src.kind === 'live' && !tw.src.latest) return tw; // nothing received yet
   const dt = 2, sc = tw.sc, nst = Math.round(adv / dt), lag = tw.lag;
   const tNow = tw.members[0].s.t + adv;
   const tEnd = tw.src.kind === 'data' ? tw.src.run.t[tw.src.run.t.length - 1] : sc.duration;
@@ -426,6 +455,7 @@ export function twinTick(tw, adv = 20) {
   const rng = tw.rng, t = tw.members[0].s.t;
   let y, sd;
   if (tw.truth) { sd = [4, 0.3]; y = [tw.truth.s.gen * VM * 1000 + tw.truth.drift + 4 * randn(rng), tw.truth.s.Tm - 273.15 + 0.3 * randn(rng)]; }
+  else if (tw.src.kind === 'live') { const L = tw.src.latest; sd = [Math.max(3, 0.03 * L.v)]; y = [L.v]; if (isFinite(L.T)) { sd.push(0.5); y.push(L.T); } } // assumed sensor noise
   else { const r = tw.src.run; sd = [r.sv]; y = [interp(r.t, r.v, t)]; if (tw.hasT) { sd.push(r.sT); y.push(interp(r.t, r.T, t)); } }
   const mo = y.length, M = tw.members, N = M.length;
   const X = M.map(m => [m.s.nAl, m.s.T, m.s.gen, Math.log(m.p.ks25), m.s.Tm]);
