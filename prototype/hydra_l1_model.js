@@ -405,30 +405,54 @@ export function autoTune(base, cfg) {
 }
 
 // ---------- live serial (Web Serial) ----------
-// One CSV line per sample, same format as the Arduino logger: t_s,T1_C,T2_C,P_bar_g,flow_L_min,I_A,V_V  (nan / blank = missing).
-export function parseFrame(line) {
-  const s = line.trim(); if (!s || s[0] === '#' || /^t_(s|ms)/.test(s)) return null;
-  const p = s.split(','); if (p.length < 2) return null;
-  const v = [];
-  for (let i = 0; i < 7; i++) {
-    const x = (p[i] === undefined ? '' : p[i]).trim().toLowerCase();
-    if (x === '' || x === 'nan' || x === 'na' || x === 'null') { v.push(NaN); continue; }
-    const n = Number(x); if (!isFinite(n)) return null; v.push(n);
-  }
-  if (!isFinite(v[0])) return null;
-  return { t: v[0], T1: v[1], T2: v[2], P: v[3], flow: v[4], I: v[5], V: v[6] };
+// Lines are CSV. If the logger sends a header line (it must contain a time column such as t_s) columns are found BY NAME, so extra
+// columns are fine; without a header the legacy order t_s,T1_C,T2_C,P_bar_g,flow_L_min,I_A,V_V is assumed. nan / blank = missing.
+const LEGACY_COLS = ['t_s', 'T1_C', 'T2_C', 'P_bar_g', 'flow_L_min', 'I_A', 'V_V'];
+const NA = new Set(['', 'nan', 'na', 'null']);
+const isNum = x => x !== '' && isFinite(Number(x));
+const pickCol = (cols, row, names, rx) => { for (const n of names) if (n in row) return n; if (rx) for (const c of cols) if (rx.test(c)) return c; return null; };
+export function stdFrame(row, cols) {
+  const get = k => (k && isFinite(row[k]) ? row[k] : NaN);
+  const tc = pickCol(cols, row, ['t_s', 't_ms', 'time_s'], /^(t|time)(_s|_ms)?$/i);
+  const tm = cols.filter(c => /(^|_)(t|temp|temperature)[0-9]*_?c$/i.test(c) && c !== tc);
+  const t1 = 'T1_C' in row ? 'T1_C' : tm[0], t2 = 'T2_C' in row ? 'T2_C' : (tm.find(c => c !== t1) || null);
+  return { t: get(tc) / (tc && /_ms$/i.test(tc) ? 1000 : 1), T1: get(t1), T2: get(t2), P: get(pickCol(cols, row, ['P_bar_g'], /^p.*bar/i)),
+    flow: get(pickCol(cols, row, ['flow_L_min'], /flow.*l_?min/i)), I: get(pickCol(cols, row, ['I_A'])), V: get(pickCol(cols, row, ['V_V'])),
+    mass: get(pickCol(cols, row, ['water_mass_g'], /mass.*_g$/i)), wet: get(pickCol(cols, row, ['H2_wet_ambient_mL'], /wet.*ml$/i)),
+    vstp: get(pickCol(cols, row, [], /(stp|dry).*ml$/i)), row };
 }
-export function liveCreate() { return { kind: 'live', latest: null, tRel: 0, tPrev: null, cumL: 0, frames: [], nFrames: 0, lines: 0, gaps: 0, resets: 0, tauT: 15 }; }
-// Cumulative H2 [mL STP] = integral of the flow column (L/min at STP), gaps longer than 5 s are NOT integrated (counted in .gaps).
+export function parseLine(src, line) {
+  const s = line.trim(); if (!s || s[0] === '#') return null;
+  const parts = s.split(',').map(x => x.trim());
+  if (parts.length >= 2 && !isNum(parts[0]) && parts.every(p => /^[A-Za-z_][A-Za-z0-9_.\-()/%°]*$/.test(p)) && parts.some(p => /^(t|time)(_s|_ms)?$/i.test(p))) { src.cols = parts; return { header: parts }; }
+  if (parts.length < 2) return null;
+  const cols = src.cols || LEGACY_COLS, row = {};
+  for (let i = 0; i < cols.length && i < parts.length; i++) { const x = parts[i].toLowerCase(); if (NA.has(x)) { row[cols[i]] = NaN; continue; } const n = Number(x); if (!isFinite(n)) return null; row[cols[i]] = n; }
+  const fr = stdFrame(row, cols); if (!isFinite(fr.t)) return null;
+  return { frame: fr };
+}
+export function parseFrame(line) { const r = parseLine({}, line); return r && r.frame ? r.frame : null; }
+export function liveCreate() { return { kind: 'live', latest: null, tRel: 0, tPrev: null, cumL: 0, flowSeen: false, v0: null, conv: null, cols: null, frames: [], hist: [], console: [], nFrames: 0, lines: 0, gaps: 0, resets: 0, tauT: 15 }; }
+// Gas collected over water is wet and at ambient conditions: dry STP volume = V * (P - p_w(T)) / 101325 * 273.15 / T (same formula as the dataset loader).
+export function wetToStp(hPa, tcC) { const Ta = tcC + 273.15; return (hPa * 100 - psat(Ta)) / P_ATM * 273.15 / Ta; }
+// Cumulative H2 [mL STP, dry] from the best available source: a dry/STP volume column, else the wet ambient column converted with p and tc
+// (src.conv), else the integrated flow column. Column volumes are zeroed at the first frame after (re)start (src.v0).
+function liveVolume(src, fr) {
+  const colV = isFinite(fr.vstp) ? fr.vstp : (isFinite(fr.wet) && src.conv ? fr.wet * src.conv : null);
+  if (colV != null) { if (src.v0 == null) src.v0 = colV; return colV - src.v0; }
+  return src.flowSeen ? src.cumL * 1000 : NaN;
+}
 // Time is the logger's own clock (relative), so a stalled browser does not distort it; a logger reboot (t decreasing) is counted in .resets.
+// Flow-integrated volume: gaps longer than 5 s are NOT integrated (counted in .gaps).
 export function liveIngest(src, fr) {
   src.nFrames++;
   if (src.tPrev == null) src.tPrev = fr.t;
   const dt = fr.t - src.tPrev; src.tPrev = fr.t;
   if (dt < 0) src.resets++;
-  else if (dt > 0) { src.tRel += dt; if (isFinite(fr.flow)) { if (dt > 5) src.gaps++; src.cumL += fr.flow * Math.min(dt, 5) / 60; } } // flow is integrated as reported (no clamping at 0: clamping turns zero-mean noise into a positive volume bias)
+  else if (dt > 0) { src.tRel += dt; if (isFinite(fr.flow)) { src.flowSeen = true; if (dt > 5) src.gaps++; src.cumL += fr.flow * Math.min(dt, 5) / 60; } } // flow is integrated as reported (no clamping at 0: clamping turns zero-mean noise into a positive volume bias)
   if (src.frames.length < 100000) src.frames.push(fr);
-  src.latest = { t: src.tRel, v: src.cumL * 1000, T: fr.T1, fr };
+  src.hist.push({ t: src.tRel, mass: fr.mass, wet: fr.wet, T1: fr.T1 }); if (src.hist.length > 3600) src.hist.shift();
+  src.latest = { t: src.tRel, v: liveVolume(src, fr), T: fr.T1, fr };
   return src;
 }
 
@@ -443,7 +467,7 @@ export function twinCreate(base, nm, seed, sc, src) {
 }
 function solve(Pyy) { const m = Pyy.length; if (m === 1) return [[1 / Pyy[0][0]]]; const d = Pyy[0][0] * Pyy[1][1] - Pyy[0][1] * Pyy[1][0]; return [[Pyy[1][1] / d, -Pyy[0][1] / d], [-Pyy[1][0] / d, Pyy[0][0] / d]]; }
 export function twinTick(tw, adv = 20) {
-  if (tw.src.kind === 'live' && !tw.src.latest) return tw; // nothing received yet
+  if (tw.src.kind === 'live' && (!tw.src.latest || !isFinite(tw.src.latest.v))) return tw; // nothing received yet / no volume signal
   const dt = 2, sc = tw.sc, nst = Math.round(adv / dt), lag = tw.lag;
   const tNow = tw.members[0].s.t + adv;
   const tEnd = tw.src.kind === 'data' ? tw.src.run.t[tw.src.run.t.length - 1] : sc.duration;

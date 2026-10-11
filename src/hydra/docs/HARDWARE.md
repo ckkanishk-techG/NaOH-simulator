@@ -31,3 +31,16 @@ Use `hydra.inference.corrections` for water-displacement vapour/hydrostatic/diss
 ## Data format
 `t_s,T1_C,T2_C,P_bar_g,flow_L_min,I_A,V_V` at 1 Hz (CSV, `nan` for missing). The twin ingests it from serial,
 a streaming CSV file or Modbus (`hydra.hardware.sources`).
+
+## Browser control panel (website, Live Twin page)
+With the logger connected over browser serial (desktop Chrome/Edge) the Live Twin page shows a **Logger control panel**
+*before any scenario is set up*. It sends plain text lines to the logger only when you press a button:
+`tare`, `cal <g>`, `p <hPa>`, `tc <°C>`, `start`, `stop` (plus a free-text box limited to letters, digits and `. + - _ =`).
+Numbers are range-checked first (cal 1-5000 g, p 800-1100 hPa, tc -10-100 °C). It never writes by itself and has no actuator
+commands: the logger remains read-only with respect to the experiment.
+
+Columns are read by name from the logger's header line (`t_s`, `T1_C`, `water_mass_g`, `H2_wet_ambient_mL`, `flow_L_min`, ...).
+Checks in the panel: mass (pour a known weight of water, pass within 2 g), gas path (push a known volume of air, pass within 10 %,
+low means a leak), and a 5-minute steady test (empty beaker, pass if the range is within 1 g, i.e. +/-0.5 g).
+For the twin the volume comes from, in order: a dry/STP volume column, `H2_wet_ambient_mL` converted with the `p` and `tc` you sent
+(assumption: gas is water-saturated at `tc`), or the integrated `flow_L_min`.
